@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Uhandisi School"
+description = "A mobile-first Kenyan learning platform where students learn affordably and unlock course modules progressively through Lipa Pole Pole payments."
+version = "1.0.0"
+id = "artifacts/uhandisi-school"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 21017
+
+[services.development]
+run = "pnpm --filter @workspace/uhandisi-school run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/uhandisi-school", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/uhandisi-school/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21017"
+BASE_PATH = "/"

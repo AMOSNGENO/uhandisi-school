@@ -1,0 +1,1 @@
+- [Lipa Pole Pole access](lipa-pole-pole-access.md) — confirmed payment callbacks drive cumulative balance and progressive module unlocks.

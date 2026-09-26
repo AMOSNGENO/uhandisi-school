@@ -1,0 +1,293 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: Uhandisi School learning and Lipa Pole Pole API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: learning
+    description: Course discovery and learning progress
+  - name: payments
+    description: Lipa Pole Pole payment operations
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+  /courses:
+    get:
+      operationId: listCourses
+      tags: [learning]
+      summary: List available courses
+      responses:
+        "200":
+          description: Available courses
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CourseSummary"
+  /courses/{courseId}:
+    get:
+      operationId: getCourse
+      tags: [learning]
+      summary: Get a course and its module access state
+      parameters:
+        - $ref: "#/components/parameters/CourseId"
+      responses:
+        "200":
+          description: Course detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CourseDetail"
+        "404":
+          description: Course not found
+  /student/dashboard:
+    get:
+      operationId: getStudentDashboard
+      tags: [learning]
+      summary: Get the signed-in student's dashboard
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentDashboard"
+  /student/payments:
+    get:
+      operationId: listStudentPayments
+      tags: [payments]
+      summary: List the student's payment ledger
+      responses:
+        "200":
+          description: Payment history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Payment"
+  /payments/stk-push:
+    post:
+      operationId: createStkPush
+      tags: [payments]
+      summary: Request an M-Pesa STK push
+      description: Creates a pending payment request. Only a confirmed callback can credit the balance or unlock content.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StkPushInput"
+      responses:
+        "202":
+          description: Payment request accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentRequest"
+        "400":
+          description: Invalid payment request
+  /mpesa/callback:
+    post:
+      operationId: processMpesaCallback
+      tags: [payments]
+      summary: Receive a verified Safaricom callback
+      description: Idempotent callback endpoint. Pending, failed, and duplicate callbacks never unlock learning content.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MpesaCallbackInput"
+      responses:
+        "200":
+          description: Callback accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CallbackResult"
+components:
+  parameters:
+    CourseId:
+      name: courseId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+    CourseSummary:
+      type: object
+      required: [id, title, category, description, price, paymentModel, lessonCount, enrolledCount, accent, imageUrl]
+      properties:
+        id: { type: integer }
+        title: { type: string }
+        category: { type: string }
+        description: { type: string }
+        price: { type: integer }
+        paymentModel:
+          type: string
+          enum: [free, paid, lipa_pole_pole]
+        lessonCount: { type: integer }
+        enrolledCount: { type: integer }
+        accent: { type: string }
+        imageUrl: { type: string }
+    Module:
+      type: object
+      required: [id, title, description, order, unlockAmount, unlocked, lessonCount, duration]
+      properties:
+        id: { type: integer }
+        title: { type: string }
+        description: { type: string }
+        order: { type: integer }
+        unlockAmount: { type: integer }
+        unlocked: { type: boolean }
+        lessonCount: { type: integer }
+        duration: { type: string }
+        status:
+          type: string
+          enum: [locked, unlocked, complete]
+    PaymentPlan:
+      type: object
+      required: [name, amountPerDay, description]
+      properties:
+        name: { type: string }
+        amountPerDay: { type: integer }
+        description: { type: string }
+    CourseProgress:
+      type: object
+      required: [coursePrice, totalPaid, remaining, percentagePaid, unlockedModules, totalModules]
+      properties:
+        coursePrice: { type: integer }
+        totalPaid: { type: integer }
+        remaining: { type: integer }
+        percentagePaid: { type: number }
+        unlockedModules: { type: integer }
+        totalModules: { type: integer }
+        nextModule:
+          type: ["string", "null"]
+        amountToUnlock:
+          type: ["integer", "null"]
+    CourseDetail:
+      allOf:
+        - $ref: "#/components/schemas/CourseSummary"
+        - type: object
+          required: [instructor, instructorRole, paymentPlan, progress, modules]
+          properties:
+            instructor: { type: string }
+            instructorRole: { type: string }
+            paymentPlan:
+              $ref: "#/components/schemas/PaymentPlan"
+            progress:
+              $ref: "#/components/schemas/CourseProgress"
+            modules:
+              type: array
+              items:
+                $ref: "#/components/schemas/Module"
+    EnrolledCourse:
+      allOf:
+        - $ref: "#/components/schemas/CourseSummary"
+        - type: object
+          required: [progress]
+          properties:
+            progress:
+              $ref: "#/components/schemas/CourseProgress"
+    StudentDashboard:
+      type: object
+      required: [studentName, streakDays, enrolledCourses, featuredCourses, totalPaid, activeCourseCount, completedCourseCount]
+      properties:
+        studentName: { type: string }
+        streakDays: { type: integer }
+        enrolledCourses:
+          type: array
+          items:
+            $ref: "#/components/schemas/EnrolledCourse"
+        featuredCourses:
+          type: array
+          items:
+            $ref: "#/components/schemas/CourseSummary"
+        totalPaid: { type: integer }
+        activeCourseCount: { type: integer }
+        completedCourseCount: { type: integer }
+    Payment:
+      type: object
+      required: [id, courseTitle, amount, status, date, phoneNumber]
+      properties:
+        id: { type: integer }
+        courseTitle: { type: string }
+        amount: { type: integer }
+        status:
+          type: string
+          enum: [pending, completed, failed, cancelled, refunded]
+        date: { type: string }
+        phoneNumber: { type: string }
+        receipt:
+          type: ["string", "null"]
+        checkoutRequestId:
+          type: ["string", "null"]
+    StkPushInput:
+      type: object
+      required: [courseId, amount, phoneNumber]
+      properties:
+        courseId: { type: integer, minimum: 1 }
+        amount: { type: integer, minimum: 100 }
+        phoneNumber:
+          type: string
+          pattern: "^(07|01|2547|2541)[0-9]{8,9}$"
+    PaymentRequest:
+      type: object
+      required: [id, status, message, checkoutRequestId]
+      properties:
+        id: { type: integer }
+        status:
+          type: string
+          enum: [pending]
+        message: { type: string }
+        checkoutRequestId: { type: string }
+    MpesaCallbackInput:
+      type: object
+      required: [checkoutRequestId, resultCode, resultDescription]
+      properties:
+        checkoutRequestId: { type: string }
+        resultCode: { type: integer }
+        resultDescription: { type: string }
+        mpesaReceipt:
+          type: ["string", "null"]
+        amount:
+          type: ["integer", "null"]
+        phoneNumber:
+          type: ["string", "null"]
+        transactionDate:
+          type: ["string", "null"]
+    CallbackResult:
+      type: object
+      required: [accepted, credited]
+      properties:
+        accepted: { type: boolean }
+        credited: { type: boolean }
+

@@ -1,0 +1,1158 @@
+Build a complete, production-ready **Uhandisi School Learning Management System (LMS)** as a standalone web application. Do NOT use Moodle or depend on Moodle in any way.
+
+The system should be designed specifically around **Lipa Pole Pole (pay-as-you-go/installment learning)** where students can pay small amounts through M-Pesa and progressively unlock course modules according to the amount they have paid.
+
+## 1. Project Identity
+
+Name: **Uhandisi School**
+
+Website: **uhandisischool.com**
+
+Tagline:
+
+**“Learn for as Little as KSh100 a Day”**
+
+The platform should be modern, responsive, fast, mobile-first, professional, and optimized for Kenyan students.
+
+---
+
+# 2. Recommended Technology Stack
+
+Use:
+
+### Frontend
+
+* React
+* TypeScript
+* Vite
+* Bootstrap 5 or Tailwind CSS
+* Responsive/mobile-first design
+* Modern dashboard UI
+
+### Backend
+
+* PHP 8.3+
+* Laravel
+* REST API architecture
+
+### Database
+
+* MySQL 8+
+
+### Authentication
+
+* Laravel authentication
+* Secure password hashing
+* Email/phone authentication
+* Role-based access control
+
+### Payments
+
+* Safaricom M-Pesa Daraja API
+* STK Push
+* M-Pesa callback/webhook
+* Transaction verification
+* Idempotent payment processing
+
+Do NOT use Moodle.
+
+---
+
+# 3. User Roles
+
+Create these roles:
+
+### Student
+
+Students can:
+
+* Register
+* Login
+* View available courses
+* Enroll in courses
+* View course modules
+* See unlocked modules
+* See locked modules
+* See how much they have paid
+* See how much remains
+* Make M-Pesa payments
+* View payment history
+* Continue learning after each payment
+* Track course progress
+* View certificates when eligible
+
+### Instructor
+
+Instructors can:
+
+* Create courses
+* Edit courses
+* Create modules
+* Upload lessons
+* Upload PDFs
+* Upload videos
+* Add quizzes
+* Add assignments
+* Manage course content
+* View enrolled students
+* Monitor student progress
+
+### Administrator
+
+Administrators can:
+
+* Manage students
+* Manage instructors
+* Manage courses
+* Manage modules
+* Configure prices
+* Configure module unlock amounts
+* View payments
+* View M-Pesa transactions
+* View failed payments
+* Manually verify transactions if necessary
+* Manage users
+* Manage certificates
+* View reports
+* Configure M-Pesa settings
+
+---
+
+# 4. Course Structure
+
+The platform must use a hierarchy like:
+
+Course
+→ Modules
+→ Lessons
+→ Content
+
+Example:
+
+## Data Analytics
+
+Course price: **KSh 2,800**
+
+Module 1:
+Introduction to Data Analytics
+Unlock amount: KSh 200
+
+Module 2:
+Excel for Data Analysis
+Unlock amount: KSh 400
+
+Module 3:
+SQL
+Unlock amount: KSh 600
+
+Module 4:
+Power BI
+Unlock amount: KSh 800
+
+Module 5:
+Python for Data Analysis
+Unlock amount: KSh 800
+
+Total:
+KSh 2,800
+
+The administrator must be able to change these values from the admin dashboard.
+
+---
+
+# 5. CORE FEATURE — LIPA POLE POLE
+
+This is the most important feature.
+
+Do NOT simply treat payment as a normal one-time course purchase.
+
+The system must maintain a student's cumulative payment balance.
+
+Example:
+
+Course price:
+
+KSh 2,800
+
+Student pays:
+
+KSh 100
+
+Balance paid:
+KSh 100
+
+Module 1:
+Locked
+
+Student pays another:
+
+KSh 100
+
+Total paid:
+KSh 200
+
+Module 1:
+UNLOCKED
+
+Student pays:
+
+KSh 200
+
+Total paid:
+KSh 400
+
+Module 2:
+UNLOCKED
+
+Student pays:
+
+KSh 300
+
+Total paid:
+KSh 700
+
+Module 3:
+UNLOCKED
+
+The system must automatically determine which modules the student can access based on the student's cumulative successful payments.
+
+---
+
+# 6. IMPORTANT PAYMENT RULE
+
+Never trust the amount sent by the frontend.
+
+The backend must determine:
+
+* Student
+* Course
+* Amount
+* M-Pesa transaction
+* Transaction status
+* Cumulative amount paid
+* Remaining balance
+* Modules unlocked
+
+Only successful/confirmed M-Pesa transactions count toward access.
+
+Pending, cancelled, failed or duplicate transactions must NOT unlock content.
+
+---
+
+# 7. PAYMENT DATABASE
+
+Create a proper payment ledger.
+
+Example:
+
+payments
+
+Fields:
+
+* id
+* user_id
+* course_id
+* checkout_request_id
+* merchant_request_id
+* mpesa_receipt
+* phone_number
+* amount
+* status
+* result_code
+* result_description
+* transaction_date
+* created_at
+* updated_at
+
+Statuses:
+
+* pending
+* completed
+* failed
+* cancelled
+* refunded
+
+M-Pesa receipt numbers must be unique.
+
+Checkout request IDs must be unique.
+
+The callback must be **idempotent**.
+
+If Safaricom sends the same callback twice, the system must not credit the student twice.
+
+---
+
+# 8. M-PESA STK PUSH
+
+Implement:
+
+Student clicks:
+
+**Pay Now**
+
+System asks for:
+
+Phone number
+Amount
+
+Example:
+
+Amount:
+KSh 200
+
+Phone:
+07XXXXXXXX
+
+Student clicks:
+
+**Pay with M-Pesa**
+
+Backend:
+
+1. Generate/access M-Pesa access token
+2. Send STK Push
+3. Save transaction as pending
+4. Wait for callback
+5. Process callback
+6. Mark payment completed/failed
+7. Recalculate student's course balance
+8. Unlock eligible modules
+9. Update dashboard
+
+Show clear statuses:
+
+“Payment request sent to your phone.”
+
+“Waiting for M-Pesa confirmation…”
+
+“Payment successful.”
+
+“Payment failed. Please try again.”
+
+---
+
+# 9. M-PESA CALLBACK
+
+Create a secure callback endpoint.
+
+Example:
+
+/api/mpesa/callback
+
+The callback must:
+
+* Validate request
+* Identify transaction
+* Extract M-Pesa receipt
+* Extract amount
+* Extract phone number
+* Extract transaction date
+* Store transaction
+* Prevent duplicates
+* Mark payment completed
+* Recalculate course balance
+* Update module access
+
+Never unlock modules based solely on the STK Push request.
+
+Unlock only after successful callback confirmation.
+
+---
+
+# 10. MODULE ACCESS ENGINE
+
+Create a dedicated access engine.
+
+For every module store:
+
+* course_id
+* module title
+* description
+* order
+* unlock_amount
+* status
+* content
+
+Example:
+
+Module 1 → KSh 200
+Module 2 → KSh 400
+Module 3 → KSh 600
+Module 4 → KSh 800
+
+The system compares:
+
+student_total_paid
+
+against
+
+module_unlock_amount
+
+If:
+
+student_total_paid >= module_unlock_amount
+
+then:
+
+module = unlocked
+
+Otherwise:
+
+module = locked
+
+---
+
+# 11. LOCKED MODULE UI
+
+Do NOT simply hide locked modules.
+
+Show them to the student.
+
+Example:
+
+### Module 3
+
+SQL Fundamentals
+
+🔒 Locked
+
+Required payment:
+
+KSh 600
+
+You have paid:
+
+KSh 400
+
+Pay:
+
+KSh 200 more
+
+[Pay KSh 200]
+
+Once payment succeeds, the module should automatically become available.
+
+---
+
+# 12. STUDENT DASHBOARD
+
+Create a professional dashboard.
+
+Display:
+
+Welcome, Amos
+
+My Courses
+
+Course:
+
+Data Analytics
+
+Progress:
+
+35%
+
+Amount Paid:
+
+KSh 1,000
+
+Course Price:
+
+KSh 2,800
+
+Remaining:
+
+KSh 1,800
+
+Unlocked Modules:
+
+3 / 8
+
+Next Module:
+
+Power BI
+
+Amount required:
+
+KSh 800
+
+Button:
+
+**Continue Learning**
+
+Button:
+
+**Pay Now**
+
+---
+
+# 13. COURSE PAGE
+
+Course page should display:
+
+Course image
+
+Course title
+
+Instructor
+
+Course description
+
+Course price
+
+Payment plan
+
+Progress
+
+Modules
+
+For every module show:
+
+✓ Unlocked
+
+or
+
+🔒 Locked
+
+If locked:
+
+Amount required
+
+Amount already paid
+
+Remaining amount needed
+
+Pay button
+
+---
+
+# 14. PAYMENT PLAN
+
+Support multiple payment plans.
+
+Example:
+
+### Flex
+
+KSh 100/day
+
+### Standard
+
+KSh 200/day
+
+### Fast Track
+
+KSh 300/day
+
+Administrators must be able to create/edit payment plans.
+
+Do not hard-code these values.
+
+---
+
+# 15. FREE COURSES
+
+Support free courses.
+
+A course can be:
+
+* Free
+* Paid
+* Lipa Pole Pole
+
+Free courses should require no payment.
+
+Paid courses should support full payment.
+
+Lipa Pole Pole courses should support progressive module unlocking.
+
+---
+
+# 16. CONTENT TYPES
+
+Modules should support:
+
+* Text lessons
+* Rich HTML content
+* PDF documents
+* Videos
+* YouTube videos
+* Images
+* Audio
+* Quizzes
+* Assignments
+* Downloadable files
+
+Use secure authorization so students cannot access protected content by manually entering URLs.
+
+---
+
+# 17. SECURITY
+
+Implement strong security.
+
+Use:
+
+* Laravel authentication
+* CSRF protection
+* SQL injection protection
+* XSS protection
+* Validation
+* Authorization policies
+* Role-based permissions
+* Secure file uploads
+* Secure API endpoints
+* Rate limiting
+* Secure M-Pesa credentials
+* Environment variables
+* No API credentials in frontend JavaScript
+
+Never expose:
+
+MPESA_CONSUMER_KEY
+MPESA_CONSUMER_SECRET
+MPESA_PASSKEY
+
+to the browser.
+
+Store them in `.env`.
+
+---
+
+# 18. ADMIN DASHBOARD
+
+Create:
+
+/admin
+
+Dashboard cards:
+
+Total Students
+Total Courses
+Active Students
+Total Payments
+Successful Payments
+Pending Payments
+Failed Payments
+Total Revenue
+
+Charts:
+
+Payments over time
+
+Student enrollments
+
+Course performance
+
+Module completion
+
+---
+
+# 19. PAYMENT MANAGEMENT
+
+Admin should be able to search:
+
+Student
+Phone number
+M-Pesa receipt
+Course
+Transaction ID
+Date
+Status
+
+Display:
+
+Amount
+
+M-Pesa receipt
+
+Phone
+
+Course
+
+Student
+
+Status
+
+Date
+
+Transaction ID
+
+---
+
+# 20. COURSE MANAGEMENT
+
+Admin should be able to:
+
+Create course
+
+Edit course
+
+Delete course
+
+Set price
+
+Set payment model
+
+Add modules
+
+Reorder modules
+
+Set module unlock amount
+
+Upload course image
+
+Publish/unpublish course
+
+---
+
+# 21. MODULE MANAGEMENT
+
+Each module should have:
+
+Title
+
+Description
+
+Order
+
+Unlock amount
+
+Lessons
+
+Content
+
+Video
+
+Files
+
+Quiz
+
+Published status
+
+The administrator must be able to drag/reorder modules.
+
+---
+
+# 22. CERTIFICATES
+
+When a student:
+
+* Completes all required modules
+* Completes required quizzes
+* Completes the course
+
+Generate a certificate.
+
+Certificate should contain:
+
+Uhandisi School
+
+Student name
+
+Course name
+
+Completion date
+
+Certificate number
+
+Verification URL
+
+Create public verification page:
+
+/certificate/verify/{certificate_number}
+
+---
+
+# 23. DATABASE STRUCTURE
+
+Create proper migrations for at least:
+
+users
+
+roles
+
+courses
+
+course_modules
+
+lessons
+
+enrollments
+
+payments
+
+mpesa_transactions
+
+payment_plans
+
+module_progress
+
+lesson_progress
+
+quizzes
+
+quiz_questions
+
+quiz_attempts
+
+certificates
+
+certificate_verifications
+
+notifications
+
+settings
+
+The database must use foreign keys and indexes properly.
+
+---
+
+# 24. API STRUCTURE
+
+Create RESTful APIs.
+
+Examples:
+
+POST /api/auth/register
+
+POST /api/auth/login
+
+GET /api/courses
+
+GET /api/courses/{id}
+
+GET /api/courses/{id}/modules
+
+POST /api/courses/{id}/enroll
+
+POST /api/payments/stk-push
+
+POST /api/mpesa/callback
+
+GET /api/payments
+
+GET /api/payments/{id}
+
+GET /api/student/courses
+
+GET /api/student/progress
+
+GET /api/student/modules
+
+---
+
+# 25. PAYMENT CALCULATION ENGINE
+
+Create a reusable service:
+
+PaymentEngine
+
+It should calculate:
+
+total course price
+
+total successful payments
+
+remaining balance
+
+percentage paid
+
+unlocked modules
+
+next module
+
+amount required for next module
+
+Example response:
+
+{
+"course_price": 2800,
+"total_paid": 1000,
+"remaining": 1800,
+"percentage_paid": 35.71,
+"unlocked_modules": 3,
+"total_modules": 8,
+"next_module": "Power BI",
+"amount_to_unlock": 800
+}
+
+---
+
+# 26. ACCESS CONTROL
+
+Do not rely only on frontend JavaScript.
+
+Every protected lesson/module endpoint must verify:
+
+Authenticated user
+
+Enrollment
+
+Payment status
+
+Module unlock requirement
+
+Course status
+
+The backend must reject unauthorized requests even if a user manually calls the API.
+
+---
+
+# 27. NOTIFICATIONS
+
+Implement notifications for:
+
+Payment successful
+
+Payment failed
+
+Module unlocked
+
+Course completed
+
+Certificate available
+
+Use:
+
+In-app notifications
+
+Email where configured
+
+SMS integration can be added later.
+
+---
+
+# 28. MOBILE-FIRST DESIGN
+
+The majority of students may use mobile phones.
+
+Design specifically for mobile.
+
+Navigation:
+
+Home
+
+Courses
+
+My Learning
+
+Payments
+
+Profile
+
+Use large buttons.
+
+Payment button should be easy to access.
+
+Course modules should be easy to navigate on a phone.
+
+---
+
+# 29. LANDING PAGE
+
+Create a professional Uhandisi School homepage.
+
+Sections:
+
+Hero
+
+“Learn for as Little as KSh100 a Day”
+
+Browse Courses
+
+How Lipa Pole Pole Works
+
+Featured Courses
+
+Popular Courses
+
+Why Uhandisi School
+
+Student testimonials
+
+Frequently Asked Questions
+
+Become an Instructor
+
+Footer
+
+---
+
+# 30. LIPA POLE POLE EXPLANATION
+
+Explain it simply:
+
+1. Choose a course
+2. Start learning
+3. Pay through M-Pesa
+4. Pay as little as KSh100
+5. More modules unlock as you pay
+6. Complete the course
+7. Receive your certificate
+
+---
+
+# 31. ADMIN CONFIGURATION
+
+Create settings for:
+
+M-Pesa environment:
+
+sandbox / production
+
+Consumer key
+
+Consumer secret
+
+Passkey
+
+Shortcode
+
+Callback URL
+
+Business type
+
+Payment timeout
+
+Currency
+
+Default payment plans
+
+All sensitive settings must be stored securely.
+
+---
+
+# 32. DEPLOYMENT
+
+The application should be deployable on a normal Linux hosting environment.
+
+Provide:
+
+`.env.example`
+
+Database migrations
+
+Seeders
+
+Storage configuration
+
+Queue configuration
+
+Cron configuration
+
+Production deployment instructions
+
+Apache/Nginx configuration
+
+SSL requirements
+
+M-Pesa callback configuration
+
+---
+
+# 33. IMPORTANT ARCHITECTURE RULE
+
+Do NOT build a fake payment system.
+
+Do NOT mark payments as successful from the frontend.
+
+Do NOT unlock modules because a user clicked “Pay”.
+
+Only a verified successful M-Pesa transaction can increase the student's paid balance.
+
+The architecture must be:
+
+Student
+↓
+Course
+↓
+Lipa Pole Pole payment request
+↓
+M-Pesa STK Push
+↓
+Safaricom
+↓
+Secure callback
+↓
+Payment Ledger
+↓
+Payment Engine
+↓
+Access Engine
+↓
+Module Unlock
+↓
+Learning
+
+---
+
+# 34. DEVELOPMENT APPROACH
+
+Build the application in phases.
+
+PHASE 1:
+Authentication + database + roles
+
+PHASE 2:
+Courses + modules + lessons
+
+PHASE 3:
+Student dashboard
+
+PHASE 4:
+Lipa Pole Pole payment engine
+
+PHASE 5:
+M-Pesa STK Push
+
+PHASE 6:
+M-Pesa callback and transaction verification
+
+PHASE 7:
+Automatic module unlocking
+
+PHASE 8:
+Admin dashboard
+
+PHASE 9:
+Progress tracking
+
+PHASE 10:
+Certificates
+
+PHASE 11:
+Security hardening
+
+PHASE 12:
+Production deployment
+
+Do not skip directly to a large amount of unfinished code.
+
+Build each phase cleanly and test it before continuing.
+
+---
+
+# 35. MOST IMPORTANT REQUIREMENT
+
+The application must be designed around **module-based progressive access**, not traditional one-time course enrollment.
+
+A student does not necessarily need to pay the entire course price before learning.
+
+The student's cumulative successful payments determine which modules are accessible.
+
+The system must always know:
+
+How much the student has paid
+
+How much remains
+
+Which modules are unlocked
+
+Which module is next
+
+How much more the student needs to pay
+
+This information must be calculated server-side and reflected consistently throughout the application.
+
+Build the system as a real production application, not a demo or static prototype.
