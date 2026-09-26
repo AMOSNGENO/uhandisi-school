@@ -69,6 +69,8 @@ export default defineConfig({
     strictPort: true,
     host: '0.0.0.0',
     allowedHosts: true,
+    // Local dev: forward API calls to the api-server (Replit routes /api itself).
+    proxy: process.env.API_URL ? { '/api': process.env.API_URL } : undefined,
     fs: {
       strict: true,
     },

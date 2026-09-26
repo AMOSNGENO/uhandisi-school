@@ -1,3 +1,4 @@
+import { pool, setupDatabase } from "@workspace/db";
 import app from "./app";
 import { logger } from "./lib/logger";
 
@@ -13,6 +14,12 @@ const port = Number(rawPort);
 
 if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
+}
+
+const createdAdmin = await setupDatabase(pool);
+if (createdAdmin) {
+  // Shown once, on the run that creates the first admin account.
+  logger.warn(createdAdmin, "Created the first admin account. Log in and keep this password safe; it will not be shown again.");
 }
 
 app.listen(port, (err) => {

@@ -47,3 +47,9 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Local secrets
+.env
+
+# Files uploaded through the admin (course images, lesson media)
+artifacts/api-server/uploads/
