@@ -7,6 +7,8 @@ import { logger } from "./lib/logger";
 import { loadUser } from "./lib/auth";
 
 const app: Express = express();
+// Behind the Vite dev proxy or a hosting proxy: trust its X-Forwarded-* headers for the public address.
+app.set("trust proxy", "loopback, linklocal, uniquelocal");
 
 app.use(
   pinoHttp({

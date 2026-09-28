@@ -56,11 +56,31 @@ router.get("/courses/:courseId/modules/:moduleId", requireAuth, async (req, res)
   }
   // Opening a free course's module counts as joining it.
   if (course.paymentModel === "free") await enroll(req.user!.id, courseId);
-  const lessons = await db
-    .select({ id: lessonsTable.id, title: lessonsTable.title, contentHtml: lessonsTable.contentHtml })
+  const rows = await db
+    .select()
     .from(lessonsTable)
     .where(eq(lessonsTable.moduleId, moduleId))
     .orderBy(asc(lessonsTable.order), asc(lessonsTable.id));
+  // Files and packages are reached through the access-checked /content routes, never their storage paths.
+  const packageUrl = (lessonId: number, href: string) => `/api/content/package/${lessonId}/${href}`;
+  const lessons = rows.map((l) => ({
+    id: l.id,
+    title: l.title,
+    kind: l.kind,
+    contentHtml: l.contentHtml,
+    externalUrl: l.kind === "url" ? l.externalUrl : null,
+    file: l.kind === "file" && l.storageKey
+      ? { name: l.fileName, type: l.fileType, size: l.fileSize, url: `/api/content/file/${l.id}` }
+      : null,
+    package: l.kind === "package" && l.storageKey && l.packageEntry
+      ? {
+        scorm: l.fileType === "scorm",
+        entryUrl: packageUrl(l.id, l.packageEntry),
+        toc: (JSON.parse(l.packageToc || "[]") as Array<{ title: string; href: string | null; depth: number }>)
+          .map((t) => ({ title: t.title, depth: t.depth, url: t.href ? packageUrl(l.id, t.href) : null })),
+      }
+      : null,
+  }));
   res.json({
     course: { id: course.id, title: course.title, accent: course.accent },
     module: { ...module, locked: !module.unlocked },

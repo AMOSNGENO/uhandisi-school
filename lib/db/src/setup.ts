@@ -62,6 +62,84 @@ const tables = [
     INDEX (module_id),
     FOREIGN KEY (module_id) REFERENCES modules(id) ON DELETE CASCADE
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+  // Exams: a lesson of kind "quiz" has settings, questions and answer options.
+  `CREATE TABLE IF NOT EXISTS quiz_settings (
+    lesson_id INT PRIMARY KEY,
+    pass_mark INT NOT NULL DEFAULT 50,
+    time_limit_minutes INT NULL,
+    max_attempts INT NULL,
+    shuffle BOOLEAN NOT NULL DEFAULT FALSE,
+    show_answers VARCHAR(20) NOT NULL DEFAULT 'after_submit',
+    required_for_certificate BOOLEAN NOT NULL DEFAULT TRUE,
+    FOREIGN KEY (lesson_id) REFERENCES lessons(id) ON DELETE CASCADE
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+  `CREATE TABLE IF NOT EXISTS questions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    lesson_id INT NOT NULL,
+    sort_order INT NOT NULL DEFAULT 1,
+    type VARCHAR(20) NOT NULL DEFAULT 'single',
+    text TEXT NOT NULL,
+    points INT NOT NULL DEFAULT 1,
+    explanation TEXT NULL,
+    INDEX (lesson_id),
+    FOREIGN KEY (lesson_id) REFERENCES lessons(id) ON DELETE CASCADE
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+  `CREATE TABLE IF NOT EXISTS question_options (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    question_id INT NOT NULL,
+    sort_order INT NOT NULL DEFAULT 1,
+    text TEXT NOT NULL,
+    is_correct BOOLEAN NOT NULL DEFAULT FALSE,
+    INDEX (question_id),
+    FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+  // One row per sitting. layout/answers/review are JSON; review is a graded snapshot, so results
+  // stay readable even if the questions are edited later.
+  `CREATE TABLE IF NOT EXISTS quiz_attempts (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    lesson_id INT NOT NULL,
+    user_id INT NOT NULL,
+    started_at DATETIME NOT NULL,
+    deadline DATETIME NULL,
+    submitted_at DATETIME NULL,
+    layout MEDIUMTEXT NOT NULL,
+    answers MEDIUMTEXT NULL,
+    score_points DOUBLE NULL,
+    max_points DOUBLE NULL,
+    percent DOUBLE NULL,
+    passed BOOLEAN NULL,
+    review MEDIUMTEXT NULL,
+    INDEX (lesson_id, user_id),
+    FOREIGN KEY (lesson_id) REFERENCES lessons(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+  // No foreign keys on purpose: a certificate stays verifiable even if the course or account goes.
+  `CREATE TABLE IF NOT EXISTS certificates (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    code VARCHAR(20) NOT NULL UNIQUE,
+    user_id INT NOT NULL,
+    course_id INT NOT NULL,
+    student_name VARCHAR(120) NOT NULL,
+    course_title VARCHAR(190) NOT NULL,
+    percent DOUBLE NULL,
+    issued_by VARCHAR(20) NOT NULL DEFAULT 'auto',
+    issued_at DATETIME NOT NULL,
+    revoked_at DATETIME NULL,
+    INDEX (user_id),
+    INDEX (course_id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+  // Admin-designed certificate backgrounds (a PDF page or an image) with text fields placed on them.
+  `CREATE TABLE IF NOT EXISTS certificate_templates (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(120) NOT NULL,
+    kind VARCHAR(10) NOT NULL,
+    storage_key VARCHAR(100) NOT NULL,
+    page_width DOUBLE NOT NULL,
+    page_height DOUBLE NOT NULL,
+    fields MEDIUMTEXT NOT NULL,
+    is_default BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at DATETIME NOT NULL
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
   `CREATE TABLE IF NOT EXISTS enrollments (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
@@ -147,6 +225,25 @@ const seedCourses: Array<{
 // MySQL 8 has no "ADD COLUMN IF NOT EXISTS" (MariaDB does).
 const addedColumns: Array<[table: string, column: string, definition: string]> = [
   ["courses", "overview_html", "MEDIUMTEXT NULL"],
+  // Lessons became Moodle-style "activities and resources": page, file, url or IMS/SCORM package.
+  ["lessons", "kind", "VARCHAR(20) NOT NULL DEFAULT 'page'"],
+  ["lessons", "external_url", "VARCHAR(1000) NULL"],
+  ["lessons", "file_name", "VARCHAR(255) NULL"],
+  ["lessons", "file_type", "VARCHAR(120) NULL"],
+  ["lessons", "file_size", "BIGINT NULL"],
+  ["lessons", "storage_key", "VARCHAR(100) NULL"],
+  ["lessons", "package_entry", "VARCHAR(500) NULL"],
+  ["lessons", "package_toc", "MEDIUMTEXT NULL"],
+  // Manual enrolment by an admin can grant the whole course without payment.
+  ["enrollments", "full_access", "BOOLEAN NOT NULL DEFAULT FALSE"],
+  // Where an item came from when imported from Moodle, so a re-import updates instead of duplicating.
+  ["courses", "moodle_id", "INT NULL"],
+  ["modules", "moodle_ref", "VARCHAR(40) NULL"],
+  ["lessons", "moodle_ref", "VARCHAR(40) NULL"],
+  // Moodle's content hash of the imported file: unchanged files aren't downloaded again.
+  ["lessons", "moodle_hash", "VARCHAR(40) NULL"],
+  // Which certificate template a course uses (NULL = the default template, or the built-in design).
+  ["courses", "certificate_template_id", "INT NULL"],
 ];
 
 async function addMissingColumns(pool: Pool) {

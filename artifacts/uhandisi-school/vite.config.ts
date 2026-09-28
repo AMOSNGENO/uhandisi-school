@@ -70,7 +70,8 @@ export default defineConfig({
     host: '0.0.0.0',
     allowedHosts: true,
     // Local dev: forward API calls to the api-server (Replit routes /api itself).
-    proxy: process.env.API_URL ? { '/api': process.env.API_URL } : undefined,
+    // xfwd passes the site's own address on, so links the API writes (certificate verification) point here.
+    proxy: process.env.API_URL ? { '/api': { target: process.env.API_URL, xfwd: true } } : undefined,
     fs: {
       strict: true,
     },

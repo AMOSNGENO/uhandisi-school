@@ -58,6 +58,9 @@
   --accent: 216 85% 72%;
   --accent-foreground: 215 79% 20%;
   --link: 218 85% 43%;
+  /* Top navigation bar: sand beige #CAB99A */
+  --nav: 39 31% 70%;
+  --nav-border: 39 25% 60%;
   --destructive: 5 68% 48%;
   --destructive-foreground: 0 0% 100%;
   --sidebar: 215 79% 20%;
@@ -119,3 +122,7 @@
 .font-mono-ui { font-family: var(--app-font-mono); }
 .shadow-soft { box-shadow: var(--shadow-sm); }
 .shadow-lift { box-shadow: var(--shadow-md); }
+/* Book reader page turns */
+@keyframes book-next { from { opacity: .35; transform: perspective(1400px) rotateY(-10deg) translateX(28px); } to { opacity: 1; transform: none; } }
+@keyframes book-prev { from { opacity: .35; transform: perspective(1400px) rotateY(10deg) translateX(-28px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { [class*="animate-[book-"] { animation: none !important; } }

@@ -57,10 +57,12 @@ export async function totalPaidForCourse(userId: number, courseId: number) {
   return rows.reduce((sum, r) => sum + r.amount, 0);
 }
 
-export function progressFor(course: Course, modules: Module[], totalPaid: number) {
-  const paid = course.paymentModel === "free" ? course.price : totalPaid;
+/** fullAccess: an admin enrolled this student with the whole course unlocked (scholarship, staff). */
+export function progressFor(course: Course, modules: Module[], totalPaid: number, fullAccess = false) {
+  const open = course.paymentModel === "free" || fullAccess;
+  const paid = open ? course.price : totalPaid;
   const withAccess = modules.map((module) => {
-    const unlocked = course.paymentModel === "free" || paid >= module.unlockAmount;
+    const unlocked = open || paid >= module.unlockAmount;
     return {
       id: module.id,
       title: module.title,
@@ -99,7 +101,12 @@ export async function getCourseForUser(courseId: number, userId: number | null, 
   );
   const enrolled = await db.select({ id: enrollmentsTable.id }).from(enrollmentsTable).where(eq(enrollmentsTable.courseId, courseId));
   const paid = userId === null ? 0 : await totalPaidForCourse(userId, courseId);
-  const { modules: moduleAccess, progress } = progressFor(course, modules, paid);
+  const [grant] = userId === null ? [] : await db
+    .select({ fullAccess: enrollmentsTable.fullAccess })
+    .from(enrollmentsTable)
+    .where(and(eq(enrollmentsTable.userId, userId), eq(enrollmentsTable.courseId, courseId)))
+    .limit(1);
+  const { modules: moduleAccess, progress } = progressFor(course, modules, paid, !!grant?.fullAccess);
   return {
     ...courseSummary(course, modules.reduce((n, m) => n + m.lessonCount, 0), enrolled.length),
     instructor: course.instructor,

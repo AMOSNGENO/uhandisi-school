@@ -4,7 +4,7 @@ import { Link, Redirect, Route, Switch, useLocation, useParams } from 'wouter';
 import {
   ArrowRight, BarChart3, BookOpen, Check, ChevronRight, Clock3,
   CreditCard, ExternalLink, Flame, GraduationCap, LayoutDashboard, LockKeyhole,
-  LogOut, Menu, Play, ReceiptText, Search, ShieldCheck, Sparkles, UserRound,
+  Award, LogOut, Menu, Play, ReceiptText, Search, ShieldCheck, Sparkles, UserRound,
   WalletCards, X, Zap,
 } from 'lucide-react';
 import * as ApiClient from '@workspace/api-client-react';
@@ -13,9 +13,18 @@ import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { api, initials, useAuthActions, useCurrentUser } from '@/lib/auth';
 import AuthPage, { loginHref } from '@/pages/auth';
-import { AdminCoursesPage, AdminOverviewPage, AdminPaymentsPage, AdminUsersPage } from '@/pages/admin';
+import AdminDashboardPage from '@/pages/admin/dashboard';
+import AdminCoursesPage from '@/pages/admin/courses';
+import CourseEditorPage from '@/pages/admin/course-editor';
+import AdminCategoriesPage from '@/pages/admin/categories';
+import AdminUsersPage from '@/pages/admin/users';
+import AdminPaymentsPage from '@/pages/admin/payments';
+import AdminMoodlePage from '@/pages/admin/moodle';
+import AdminCertificatesPage from '@/pages/admin/certificates';
+import CertificateEditorPage from '@/pages/admin/certificate-editor';
 import NotFound from '@/pages/not-found';
 import ModulePage from '@/pages/module';
+import { CertificatesPage, VerifyPage } from '@/pages/certificates';
 import RichContent from '@/components/rich-content';
 import '@/index.css';
 
@@ -60,6 +69,7 @@ const navItems = [
   { href: '/courses', label: 'Explore courses', icon: BookOpen },
   { href: '/learning', label: 'My learning', icon: GraduationCap },
   { href: '/payments', label: 'Payments', icon: WalletCards },
+  { href: '/certificates', label: 'Certificates', icon: Award },
 ];
 // The admin pages have their own tabs, so the main bar only needs one entry point.
 const adminNavItem = { href: '/admin', label: 'Admin', icon: ShieldCheck };
@@ -74,7 +84,7 @@ function Mark() {
 
 function TopNavLink({ href, label, icon: Icon, active }: (typeof navItems)[number] & { active: boolean }) {
   return <Link href={href} data-testid={`link-nav-${label.toLowerCase().replaceAll(' ', '-')}`} aria-current={active ? 'page' : undefined}
-    className={`flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-[15px] font-bold leading-tight text-[hsl(var(--foreground))] transition hover:-translate-y-px hover:bg-[hsl(var(--secondary))] ${active ? 'bg-[hsl(var(--secondary))] shadow-[inset_0_-2px_0_hsl(var(--link))]' : ''}`}>
+    className={`flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-[15px] font-bold leading-tight text-[hsl(var(--foreground))] transition hover:-translate-y-px hover:bg-white/70 ${active ? 'bg-white/[.78] shadow-[inset_0_-2px_0_hsl(var(--link))]' : ''}`}>
     <Icon size={16} strokeWidth={active ? 2.4 : 1.8} /><span>{label}</span>
   </Link>;
 }
@@ -93,7 +103,7 @@ function Shell({ children }: { children: ReactNode }) {
   const loginLink = loginHref(location);
   return (
     <div className="grain min-h-[100dvh] bg-[hsl(var(--background))]">
-      <header className="sticky top-0 z-30 border-b border-[#eeeeee] bg-white text-[hsl(var(--foreground))] shadow-[0_1px_5px_rgba(0,0,0,0.06)]">
+      <header className="sticky top-0 z-30 border-b border-[hsl(var(--nav-border))] bg-[hsl(var(--nav))] text-[hsl(var(--foreground))] shadow-[0_1px_5px_rgba(0,0,0,0.08)]">
         <div className="mx-auto flex h-[68px] max-w-[1320px] items-center gap-6 px-5 sm:px-8 lg:px-10">
           <Mark />
           <nav className="hidden min-w-0 flex-1 items-center gap-1 overflow-x-auto lg:flex" aria-label="Primary navigation">
@@ -101,13 +111,13 @@ function Shell({ children }: { children: ReactNode }) {
           </nav>
           <div className="ml-auto flex items-center gap-2 sm:gap-3">
             {user ? <>
-              <Link href="/profile" className="flex items-center gap-2.5 rounded-md py-1 pl-1 pr-2 transition hover:bg-[hsl(var(--secondary))]" data-testid="link-profile-header">
+              <Link href="/profile" className="flex items-center gap-2.5 rounded-md py-1 pl-1 pr-2 transition hover:bg-white/70" data-testid="link-profile-header">
                 <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[hsl(var(--primary))] text-xs font-bold text-[hsl(var(--primary-foreground))]">{initials(user.name)}</span>
-                <span className="hidden max-w-[140px] xl:block"><span className="block truncate text-sm font-bold leading-tight">{user.name}</span><span className="text-[11px] capitalize text-[hsl(var(--muted-foreground))]">{user.role}</span></span>
+                <span className="hidden max-w-[140px] xl:block"><span className="block truncate text-sm font-bold leading-tight">{user.name}</span><span className="text-[11px] capitalize text-[hsl(var(--foreground)/.7)]">{user.role}</span></span>
               </Link>
-              <button onClick={signOut} className="hidden size-9 place-items-center rounded-md text-[hsl(var(--muted-foreground))] transition hover:bg-[hsl(var(--secondary))] hover:text-[hsl(var(--foreground))] lg:grid" aria-label="Log out" title="Log out" data-testid="button-logout"><LogOut size={17} /></button>
+              <button onClick={signOut} className="hidden size-9 place-items-center rounded-md text-[hsl(var(--foreground)/.75)] transition hover:bg-white/70 hover:text-[hsl(var(--foreground))] lg:grid" aria-label="Log out" title="Log out" data-testid="button-logout"><LogOut size={17} /></button>
             </> : <>
-              <Link href={loginLink} className="rounded-md px-3 py-2 text-[15px] font-bold hover:bg-[hsl(var(--secondary))]" data-testid="link-header-login">Log in</Link>
+              <Link href={loginLink} className="whitespace-nowrap rounded-md px-3 py-2 text-[15px] font-bold hover:bg-white/70" data-testid="link-header-login">Log in</Link>
               <Link href={loginHref(location, 'register')} className="hidden rounded-md bg-[hsl(var(--primary))] px-4 py-2 text-sm font-bold text-[hsl(var(--primary-foreground))] transition hover:bg-[hsl(var(--primary)/.9)] sm:block" data-testid="link-header-register">Sign up free</Link>
             </>}
             <button onClick={() => setMobileOpen(!mobileOpen)} className="grid size-11 place-items-center rounded-md border border-[hsl(var(--primary)/.12)] bg-white/90 shadow-[0_2px_8px_rgba(0,0,0,0.12)] lg:hidden" aria-label={mobileOpen ? 'Close navigation' : 'Open navigation'} aria-expanded={mobileOpen} data-testid="button-mobile-menu">{mobileOpen ? <X size={19} /> : <Menu size={19} />}</button>
@@ -230,7 +240,7 @@ function DetailPage() {
   if (course.isLoading) return <LoadingState rows={4} />;
   if (course.isError || !data) return <ErrorState onRetry={() => course.refetch()} />;
   const p = data.progress;
-  return <><Link href="/courses" className="mb-6 inline-flex items-center gap-2 text-xs font-bold text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--primary))]" data-testid="link-back-courses"><ChevronRight size={14} className="rotate-180" /> All courses</Link><section className="grid overflow-hidden rounded-xl bg-[hsl(var(--sidebar))] text-[hsl(var(--sidebar-foreground))] lg:grid-cols-[1.1fr_.9fr]"><div className="p-7 sm:p-10"><p className="mb-4 text-[10px] font-bold uppercase tracking-[.2em] text-[hsl(var(--accent))]">{data.category} · {data.lessonCount} lessons</p><h1 className="max-w-2xl font-display text-4xl font-bold leading-[1.08] sm:text-5xl">{data.title}</h1><p className="mt-5 max-w-xl text-sm leading-7 text-white/65">{data.description}</p><div className="mt-7 flex flex-wrap items-center gap-4 text-xs text-white/65"><span className="flex items-center gap-2"><UserRound size={15} /> {data.instructor}</span><span className="h-1 w-1 rounded-full bg-white/30" /><span>{data.instructorRole}</span></div></div><div className="relative min-h-[260px] overflow-hidden p-7 sm:p-10" style={{ background: data.accent || 'hsl(var(--primary))' }}><div className="absolute -right-20 -top-16 size-64 rounded-full border-[38px] border-white/10" /><div className="relative flex h-full flex-col justify-between"><span className="w-fit rounded-full bg-black/15 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[.15em]">Your progress</span><div><div className="mb-2 flex items-end justify-between"><span className="font-mono-ui text-4xl font-medium">{Math.round(p.percentagePaid)}<small className="text-xl">%</small></span><span className="text-xs text-white/70">{money(p.totalPaid)} of {money(p.coursePrice)}</span></div><ProgressBar value={p.percentagePaid} light /><p className="mt-3 text-xs text-white/70">{p.unlockedModules} of {p.totalModules} modules unlocked</p></div></div></div></section><div className="mt-8 grid gap-8 lg:grid-cols-[1fr_340px]"><section>{data.overviewHtml?.trim() ? <div className="mb-10" data-testid="course-overview"><p className="text-[10px] font-bold uppercase tracking-[.2em] text-[hsl(var(--primary))]">About this course</p><RichContent html={data.overviewHtml} className="mt-3" /></div> : null}<div className="mb-4 flex items-end justify-between"><div><p className="text-[10px] font-bold uppercase tracking-[.2em] text-[hsl(var(--primary))]">The curriculum</p><h2 className="mt-1 font-display text-2xl font-bold">Learn in clear steps</h2></div><span className="text-xs text-[hsl(var(--muted-foreground))]">{data.modules.length} modules</span></div><div className="space-y-3">{data.modules.map((module, i) => <ModuleRow key={module.id} module={module} index={i} courseId={data.id} />)}</div></section>{data.paymentModel === 'free' ? <FreeCoursePanel course={data} /> : <aside className="h-fit rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-5 shadow-soft lg:sticky lg:top-24"><div className="flex items-center gap-2 text-[hsl(var(--primary))]"><Zap size={17} fill="currentColor" /><span className="text-xs font-bold uppercase tracking-[.12em]">Lipa Pole Pole</span></div><h3 className="mt-4 font-display text-2xl font-bold">Pay as you grow</h3><p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">{data.paymentPlan.description}</p><div className="my-5 border-y border-[hsl(var(--border))] py-4"><div className="flex justify-between text-sm"><span className="text-[hsl(var(--muted-foreground))]">Next unlock</span><span className="font-mono-ui font-medium">{p.amountToUnlock ? money(p.amountToUnlock) : 'Complete'}</span></div><div className="mt-2 flex justify-between text-sm"><span className="text-[hsl(var(--muted-foreground))]">Daily plan</span><span className="font-mono-ui font-medium">{money(data.paymentPlan.amountPerDay)}</span></div></div>{user
+  return <><Link href="/courses" className="mb-6 inline-flex items-center gap-2 text-xs font-bold text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--primary))]" data-testid="link-back-courses"><ChevronRight size={14} className="rotate-180" /> All courses</Link><section className="grid overflow-hidden rounded-xl bg-[hsl(var(--sidebar))] text-[hsl(var(--sidebar-foreground))] lg:grid-cols-[1.1fr_.9fr]"><div className="p-7 sm:p-10"><p className="mb-4 text-[10px] font-bold uppercase tracking-[.2em] text-[hsl(var(--accent))]">{data.category} · {data.lessonCount} lessons</p><h1 className="max-w-2xl font-display text-4xl font-bold leading-[1.08] sm:text-5xl">{data.title}</h1><p className="mt-5 max-w-xl text-sm leading-7 text-white/65">{data.description}</p><div className="mt-7 flex flex-wrap items-center gap-4 text-xs text-white/65"><span className="flex items-center gap-2"><UserRound size={15} /> {data.instructor}</span><span className="h-1 w-1 rounded-full bg-white/30" /><span>{data.instructorRole}</span></div></div><div className="relative min-h-[260px] overflow-hidden p-7 sm:p-10" style={{ background: data.accent || 'hsl(var(--primary))' }}><div className="absolute -right-20 -top-16 size-64 rounded-full border-[38px] border-white/10" /><div className="relative flex h-full flex-col justify-between"><span className="w-fit rounded-full bg-black/15 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[.15em]">Your progress</span><div><div className="mb-2 flex items-end justify-between"><span className="font-mono-ui text-4xl font-medium">{Math.round(p.percentagePaid)}<small className="text-xl">%</small></span><span className="text-xs text-white/70">{money(p.totalPaid)} of {money(p.coursePrice)}</span></div><ProgressBar value={p.percentagePaid} light /><p className="mt-3 text-xs text-white/70">{p.unlockedModules} of {p.totalModules} {p.totalModules === 1 ? 'module' : 'modules'} unlocked</p></div></div></div></section><div className="mt-8 grid gap-8 lg:grid-cols-[1fr_340px]"><section>{data.overviewHtml?.trim() ? <div className="mb-10" data-testid="course-overview"><p className="text-[10px] font-bold uppercase tracking-[.2em] text-[hsl(var(--primary))]">About this course</p><RichContent html={data.overviewHtml} className="mt-3" /></div> : null}<div className="mb-4 flex items-end justify-between"><div><p className="text-[10px] font-bold uppercase tracking-[.2em] text-[hsl(var(--primary))]">The curriculum</p><h2 className="mt-1 font-display text-2xl font-bold">Learn in clear steps</h2></div><span className="text-xs text-[hsl(var(--muted-foreground))]">{data.modules.length} {data.modules.length === 1 ? 'module' : 'modules'}</span></div><div className="space-y-3">{data.modules.map((module, i) => <ModuleRow key={module.id} module={module} index={i} courseId={data.id} />)}</div></section>{data.paymentModel === 'free' ? <FreeCoursePanel course={data} /> : <aside className="h-fit rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-5 shadow-soft lg:sticky lg:top-24"><div className="flex items-center gap-2 text-[hsl(var(--primary))]"><Zap size={17} fill="currentColor" /><span className="text-xs font-bold uppercase tracking-[.12em]">Lipa Pole Pole</span></div><h3 className="mt-4 font-display text-2xl font-bold">Pay as you grow</h3><p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">{data.paymentPlan.description}</p><div className="my-5 border-y border-[hsl(var(--border))] py-4"><div className="flex justify-between text-sm"><span className="text-[hsl(var(--muted-foreground))]">Next unlock</span><span className="font-mono-ui font-medium">{p.amountToUnlock ? money(p.amountToUnlock) : 'Complete'}</span></div><div className="mt-2 flex justify-between text-sm"><span className="text-[hsl(var(--muted-foreground))]">Daily plan</span><span className="font-mono-ui font-medium">{money(data.paymentPlan.amountPerDay)}</span></div></div>{user
       ? <button onClick={() => setPaying(true)} disabled={!p.amountToUnlock} className="flex w-full items-center justify-center gap-2 rounded-md bg-[hsl(var(--accent))] py-3.5 text-sm font-bold text-[hsl(var(--accent-foreground))] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50" data-testid="button-lipa-pole-pole">{p.amountToUnlock ? 'Make a payment' : 'Course fully unlocked'} <ArrowRight size={16} /></button>
       : <Link href={loginHref(`/courses/${data.id}`)} className="flex w-full items-center justify-center gap-2 rounded-md bg-[hsl(var(--accent))] py-3.5 text-sm font-bold text-[hsl(var(--accent-foreground))] transition hover:-translate-y-0.5" data-testid="link-login-to-enroll">Log in to enroll <ArrowRight size={16} /></Link>}<p className="mt-3 text-center text-[10px] text-[hsl(var(--muted-foreground))]">No subscription. No hidden fees.</p></aside>}</div>{paying && <PaymentModal course={data} onClose={() => setPaying(false)} />}</>;
 }
@@ -259,7 +269,7 @@ function FreeCoursePanel({ course }: { course: CourseDetail }) {
     <div className="flex items-center gap-2 text-[hsl(var(--link))]"><Sparkles size={17} /><span className="text-xs font-bold uppercase tracking-[.12em]">Free course</span></div>
     <h3 className="mt-4 font-display text-2xl font-bold">Learn at no cost</h3>
     <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">Every module is open. No payment, no M-Pesa, no catch.</p>
-    <div className="my-5 border-y border-[hsl(var(--border))] py-4"><div className="flex justify-between text-sm"><span className="text-[hsl(var(--muted-foreground))]">Price</span><span className="font-mono-ui font-medium">Free</span></div><div className="mt-2 flex justify-between text-sm"><span className="text-[hsl(var(--muted-foreground))]">Modules</span><span className="font-mono-ui font-medium">{course.modules.length} open</span></div></div>
+    <div className="my-5 border-y border-[hsl(var(--border))] py-4"><div className="flex justify-between text-sm"><span className="text-[hsl(var(--muted-foreground))]">Price</span><span className="font-mono-ui font-medium">Free</span></div><div className="mt-2 flex justify-between text-sm"><span className="text-[hsl(var(--muted-foreground))]">Modules</span><span className="font-mono-ui font-medium">{course.modules.length} {course.modules.length === 1 ? 'module' : 'modules'}</span></div></div>
     {!user
       ? <Link href={loginHref(`/courses/${course.id}`, 'register')} className={cta} data-testid="link-signup-free-course">Sign up to start free <ArrowRight size={16} /></Link>
       : enrolled
@@ -304,6 +314,12 @@ function PreferenceRow({ icon: Icon, title, copy, enabled, onChange, disabled, t
   return <div className="flex items-center gap-3 py-5"><span className="grid size-9 shrink-0 place-items-center rounded-md bg-[hsl(var(--secondary))] text-[hsl(var(--primary))]"><Icon size={16} /></span><div className="min-w-0 flex-1"><p className="text-sm font-bold">{title}</p><p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{copy}</p></div><button onClick={onChange} disabled={disabled} className={`relative h-6 w-11 shrink-0 rounded-full transition ${enabled ? 'bg-[hsl(var(--primary))]' : 'bg-[hsl(var(--muted))]'} disabled:opacity-50`} aria-label={title} data-testid={testId}><span className={`absolute top-1 size-4 rounded-full bg-[hsl(var(--card))] transition-all ${enabled ? 'left-6' : 'left-1'}`} /></button></div>;
 }
 
+/** Admin pages; anyone else is sent home. A stable component so pages keep their state across re-renders. */
+function AdminOnly({ children }: { children: ReactNode }) {
+  const user = useCurrentUser().data;
+  return user?.role === 'admin' ? <>{children}</> : <Redirect to="/" />;
+}
+
 function AppRouter() {
   const me = useCurrentUser();
   const [location] = useLocation();
@@ -319,17 +335,25 @@ function AppRouter() {
       <Route path="/"><Redirect to="/courses" /></Route>
       <Route path="/courses"><Shell><ErrorBoundary><CoursesPage /></ErrorBoundary></Shell></Route>
       <Route path="/courses/:id"><Shell><ErrorBoundary><DetailPage /></ErrorBoundary></Shell></Route>
+      <Route path="/verify/:code?"><Shell><ErrorBoundary><VerifyPage /></ErrorBoundary></Shell></Route>
       <Route><Redirect to={loginHref(location)} /></Route>
     </Switch>;
   }
   if (location === '/login' || location === '/register') return <Redirect to={user.role === 'admin' ? '/admin' : '/'} />;
 
-  const adminOnly = (Page: () => ReactNode) => () => user.role === 'admin' ? <Page /> : <Redirect to="/" />;
   return <Shell><ErrorBoundary><Switch>
     <Route path="/" component={HomePage} /><Route path="/courses" component={CoursesPage} /><Route path="/courses/:id/modules/:moduleId" component={ModulePage} /><Route path="/courses/:id" component={DetailPage} />
     <Route path="/learning" component={LearningPage} /><Route path="/payments" component={PaymentsPage} /><Route path="/profile" component={ProfilePage} />
-    <Route path="/admin" component={adminOnly(AdminOverviewPage)} /><Route path="/admin/courses" component={adminOnly(AdminCoursesPage)} />
-    <Route path="/admin/users" component={adminOnly(AdminUsersPage)} /><Route path="/admin/payments" component={adminOnly(AdminPaymentsPage)} />
+    <Route path="/certificates" component={CertificatesPage} /><Route path="/verify/:code?" component={VerifyPage} />
+    <Route path="/admin">{() => <AdminOnly><AdminDashboardPage /></AdminOnly>}</Route>
+    <Route path="/admin/courses">{() => <AdminOnly><AdminCoursesPage /></AdminOnly>}</Route>
+    <Route path="/admin/courses/:id/:tab?">{() => <AdminOnly><CourseEditorPage /></AdminOnly>}</Route>
+    <Route path="/admin/categories">{() => <AdminOnly><AdminCategoriesPage /></AdminOnly>}</Route>
+    <Route path="/admin/users">{() => <AdminOnly><AdminUsersPage /></AdminOnly>}</Route>
+    <Route path="/admin/payments">{() => <AdminOnly><AdminPaymentsPage /></AdminOnly>}</Route>
+    <Route path="/admin/moodle">{() => <AdminOnly><AdminMoodlePage /></AdminOnly>}</Route>
+    <Route path="/admin/certificates">{() => <AdminOnly><AdminCertificatesPage /></AdminOnly>}</Route>
+    <Route path="/admin/certificates/:id">{() => <AdminOnly><CertificateEditorPage /></AdminOnly>}</Route>
     <Route component={NotFound} />
   </Switch></ErrorBoundary></Shell>;
 }
