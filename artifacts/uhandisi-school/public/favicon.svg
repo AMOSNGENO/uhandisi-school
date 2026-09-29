@@ -1,3 +1,24 @@
-<svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
-<rect width="180" height="180" rx="36" fill="#FF3C00"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="140 158 975 975">
+  <title>Uhandisi School</title>
+  <!-- Shield: red rim, gold band, navy field -->
+  <path d="M215 173H1038Q1048 173 1048 183V650C1048 905 800 1062 627 1128C454 1062 205 905 205 650V183Q205 173 215 173Z" fill="#e3001b"/>
+  <path d="M240 207H1014V650C1014 882 790 1032 627 1092C464 1032 240 882 240 650Z" fill="#fcc800"/>
+  <path d="M263 231H991V650C991 862 780 1006 627 1066C474 1006 263 862 263 650Z" fill="#08265e"/>
+  <!-- Circuit traces -->
+  <g fill="none" stroke="#fcc800" stroke-width="17" stroke-linejoin="round">
+    <path d="M627 464V320M548 464V405L509 366M706 464V405L745 366M494 495H455L401 441M756 495H797L851 441M494 548H366M494 645H366M756 548H888M756 645H888M494 695H455L401 749M756 695H797L851 749M548 719V775L508 820M706 719V775L745 820M627 719V876"/>
+    <g fill="#08265e">
+      <circle cx="627" cy="292" r="26"/><circle cx="490" cy="340" r="26"/><circle cx="764" cy="340" r="26"/>
+      <circle cx="380" cy="420" r="26"/><circle cx="873" cy="420" r="26"/>
+      <circle cx="338" cy="548" r="26"/><circle cx="915" cy="548" r="26"/>
+      <circle cx="338" cy="645" r="26"/><circle cx="915" cy="645" r="26"/>
+      <circle cx="383" cy="772" r="26"/><circle cx="872" cy="772" r="26"/>
+      <circle cx="490" cy="848" r="26"/><circle cx="763" cy="848" r="26"/>
+      <circle cx="627" cy="903" r="26"/>
+    </g>
+    <!-- Chip -->
+    <rect x="494" y="464" width="262" height="255" rx="24" fill="#08265e"/>
+  </g>
+  <!-- The U -->
+  <path d="M541 510H598V608Q598 640 627 640Q655 640 655 608V510H711V606Q711 681 626 681Q541 681 541 606Z" fill="#e3001b"/>
 </svg>
