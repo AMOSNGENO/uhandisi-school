@@ -89,8 +89,9 @@ function Mark() {
 
 function TopNavLink({ href, label, icon: Icon, active }: (typeof navItems)[number] & { active: boolean }) {
   return <Link href={href} data-testid={`link-nav-${label.toLowerCase().replaceAll(' ', '-')}`} aria-current={active ? 'page' : undefined}
-    className={`flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-[15px] font-bold leading-tight text-[hsl(var(--foreground))] transition hover:-translate-y-px hover:bg-white/70 ${active ? 'bg-white/[.78] shadow-[inset_0_-2px_0_hsl(var(--link))]' : ''}`}>
-    <Icon size={16} strokeWidth={active ? 2.4 : 1.8} /><span>{label}</span>
+    className={`flex items-center gap-2 whitespace-nowrap rounded-md px-2.5 py-2 text-sm font-bold xl:px-3 xl:text-[15px] leading-tight text-[hsl(var(--foreground))] transition hover:-translate-y-px hover:bg-white/70 ${active ? 'bg-white/[.78] shadow-[inset_0_-2px_0_hsl(var(--link))]' : ''}`}>
+    {/* Icons only where there's room, so the whole menu fits on laptop screens. */}
+    <Icon size={16} strokeWidth={active ? 2.4 : 1.8} className="hidden xl:block" /><span>{label}</span>
   </Link>;
 }
 
@@ -109,7 +110,7 @@ function Shell({ children }: { children: ReactNode }) {
   return (
     <div className="grain min-h-[100dvh] overflow-x-clip bg-[hsl(var(--background))]">
       <header className="sticky top-0 z-30 border-b border-[hsl(var(--nav-border))] bg-[hsl(var(--nav))] text-[hsl(var(--foreground))] shadow-[0_1px_5px_rgba(0,0,0,0.08)]">
-        <div className="mx-auto flex h-[68px] max-w-[1320px] items-center gap-6 px-5 sm:px-8 lg:px-10">
+        <div className="mx-auto flex h-[68px] max-w-[1320px] items-center gap-6 px-5 sm:px-8 lg:gap-4 lg:px-10 xl:gap-6">
           <Mark />
           <nav className="hidden min-w-0 flex-1 items-center gap-1 overflow-x-auto lg:flex" aria-label="Primary navigation">
             {allNav.map(item => <TopNavLink key={item.href} {...item} active={isActive(item.href)} />)}
@@ -118,7 +119,8 @@ function Shell({ children }: { children: ReactNode }) {
             {user ? <>
               <Link href="/profile" className="flex items-center gap-2.5 rounded-md py-1 pl-1 pr-2 transition hover:bg-white/70" data-testid="link-profile-header">
                 <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[hsl(var(--primary))] text-xs font-bold text-[hsl(var(--primary-foreground))]">{initials(user.name)}</span>
-                <span className="hidden max-w-[140px] xl:block"><span className="block truncate text-sm font-bold leading-tight">{user.name}</span><span className="text-[11px] capitalize text-[hsl(var(--foreground)/.7)]">{user.role}</span></span>
+                {/* Name beside the avatar only on wide screens, and never for admins, whose menu has an extra item. */}
+                <span className={`hidden max-w-[140px] ${isAdmin ? '' : '2xl:block'}`}><span className="block truncate text-sm font-bold leading-tight">{user.name}</span><span className="text-[11px] capitalize text-[hsl(var(--foreground)/.7)]">{user.role}</span></span>
               </Link>
               <button onClick={signOut} className="hidden size-9 place-items-center rounded-md text-[hsl(var(--foreground)/.75)] transition hover:bg-white/70 hover:text-[hsl(var(--foreground))] lg:grid" aria-label="Log out" title="Log out" data-testid="button-logout"><LogOut size={17} /></button>
             </> : <>
@@ -176,28 +178,82 @@ function ProgressBar({ value, light = false }: { value: number; light?: boolean 
   return <div className={`h-2 overflow-hidden rounded-full ${light ? 'bg-white/20' : 'bg-[hsl(var(--muted))]'}`}><div className="h-full rounded-full bg-[hsl(var(--accent))] transition-all duration-700" style={{ width: `${Math.max(0, Math.min(100, value))}%` }} /></div>;
 }
 
-function HomePage() {
-  const dashboard = useGetStudentDashboard();
+const heroEyebrow = 'mb-4 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.2em] text-[hsl(var(--accent))]';
+const heroCta = 'inline-flex items-center gap-2 rounded-md bg-[hsl(var(--accent))] px-4 py-3 text-xs font-extrabold text-[hsl(var(--accent-foreground))] transition hover:-translate-y-0.5';
+
+/** Edge-to-edge banner under the menu. With the admin's photo (Site settings) it fills the screen: the photo
+ *  covers it all, darkened behind the text (from the left on computers, from the bottom on phones and tablets). */
+function HeroBanner({ children, aside }: { children: ReactNode; aside?: ReactNode }) {
   const site = useSiteSettings().data;
   const heroImage = site?.heroImageUrl;
-  const heroFlip = site?.heroImageFlip;
+  return <section className={`animate-rise relative -mt-7 ml-[calc(50%-50vw)] flex w-screen overflow-hidden bg-[hsl(var(--sidebar))] text-[hsl(var(--sidebar-foreground))] sm:-mt-10 ${heroImage ? 'min-h-[calc(100dvh-136px)] lg:min-h-[calc(100dvh-68px)]' : ''}`} data-testid="section-hero">
+    {heroImage
+      ? <><img src={heroImage} alt="" className={`absolute inset-0 size-full object-cover object-[center_25%] ${site?.heroImageFlip ? '-scale-x-100' : ''}`} data-testid="img-hero" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[hsl(var(--sidebar))] from-[38%] via-[hsl(var(--sidebar)/.55)] via-[62%] to-[hsl(var(--sidebar)/.05)] lg:bg-gradient-to-r lg:from-[hsl(var(--sidebar)/.95)] lg:from-[22%] lg:via-[hsl(var(--sidebar)/.5)] lg:via-[48%] lg:to-transparent lg:to-[75%] 2xl:from-[32%] 2xl:via-[56%] 2xl:to-[85%]" /></>
+      : <><div className="absolute -top-28 right-[8%] size-80 rounded-full border-[40px] border-[hsl(var(--accent)/.1)]" /><div className="absolute -bottom-28 right-[22%] size-48 rounded-full border-[20px] border-[hsl(var(--accent)/.08)]" /></>}
+    <div className={`relative mx-auto flex w-full max-w-[1320px] flex-col px-5 sm:px-8 lg:px-10 ${heroImage ? 'justify-end pb-10 pt-40 sm:pb-14 lg:justify-center lg:py-16' : 'py-10 sm:py-14'}`}>
+      <div className="max-w-2xl">{children}</div>
+      {aside && <div className={`mt-9 flex gap-6 border-t border-white/10 pt-5 sm:absolute sm:bottom-10 sm:right-8 sm:mt-0 sm:border-0 sm:pt-0 lg:right-10 ${heroImage ? 'sm:rounded-lg sm:bg-black/45 sm:px-5 sm:py-3 sm:backdrop-blur-sm' : ''}`}>{aside}</div>}
+    </div>
+  </section>;
+}
+
+/** The public homepage: what visitors see before they have an account. */
+function GuestHomePage() {
+  const courses = useListCourses();
+  const items = (courses.data as CourseSummary[] | undefined) || [];
+  const free = items.filter(c => c.paymentModel === 'free').length;
+  const steps = [
+    { icon: Search, title: 'Pick a practical course', copy: 'Browse free and paid courses and read every outline before you sign up.' },
+    { icon: WalletCards, title: 'Pay pole pole with M-Pesa', copy: 'Unlock one module at a time, from as little as KSh100 a day. No big upfront fee.' },
+    { icon: Award, title: 'Earn your certificate', copy: 'Finish the lessons, pass the exams and get a certificate anyone can verify by QR code.' },
+  ];
+  return <div className="space-y-14">
+    <HeroBanner aside={items.length ? <><div><p className="font-mono-ui text-2xl font-medium text-[hsl(var(--accent))]">{items.length}</p><p className="mt-1 text-[10px] text-white/55">courses</p></div>{free > 0 && <div><p className="font-mono-ui text-2xl font-medium">{free}</p><p className="mt-1 text-[10px] text-white/55">free to start</p></div>}</> : undefined}>
+      <p className={heroEyebrow}><span className="size-1.5 rounded-full bg-[hsl(var(--accent))]" /> Uhandisi School</p>
+      <h1 className="font-display text-4xl font-bold tracking-tight sm:text-6xl">Learn a skill.<br /><span className="text-[hsl(var(--accent))]">Pay as you grow.</span></h1>
+      <p className="mt-5 max-w-lg text-sm leading-6 text-[hsl(var(--sidebar-foreground)/.75)] sm:text-base sm:leading-7">Practical online courses you unlock one module at a time, from as little as KSh100 a day. Learn at your own pace and earn a certificate.</p>
+      <div className="mt-7 flex flex-wrap gap-3">
+        <Link href="/courses" className={heroCta} data-testid="link-guest-browse">Browse courses <ArrowRight size={15} /></Link>
+        <Link href={loginHref('/', 'register')} className="inline-flex items-center gap-2 rounded-md border border-white/35 bg-white/10 px-4 py-3 text-xs font-extrabold text-white backdrop-blur-sm transition hover:bg-white/20" data-testid="link-guest-register">Create a free account</Link>
+      </div>
+    </HeroBanner>
+
+    <section className="animate-rise-2">
+      <p className="text-[10px] font-bold uppercase tracking-[.2em] text-[hsl(var(--primary))]">How it works</p>
+      <h2 className="mt-1 font-display text-2xl font-bold sm:text-3xl">Three steps to a new skill</h2>
+      <div className="mt-6 grid gap-4 md:grid-cols-3">
+        {steps.map(({ icon: Icon, title, copy }, i) => <div key={title} className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-6 shadow-soft">
+          <div className="flex items-center justify-between"><span className="grid size-11 place-items-center rounded-md bg-[hsl(var(--secondary))] text-[hsl(var(--primary))]"><Icon size={20} /></span><span className="font-mono-ui text-3xl font-medium text-[hsl(var(--muted-foreground)/.35)]">0{i + 1}</span></div>
+          <h3 className="mt-5 text-lg font-bold">{title}</h3><p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">{copy}</p>
+        </div>)}
+      </div>
+    </section>
+
+    <section className="animate-rise-3">
+      <div className="mb-4 flex items-end justify-between gap-4"><div><p className="text-[10px] font-bold uppercase tracking-[.2em] text-[hsl(var(--primary))]">Start today</p><h2 className="mt-1 font-display text-2xl font-bold sm:text-3xl">Popular courses</h2></div><Link href="/courses" className="shrink-0 text-xs font-bold text-[hsl(var(--primary))]" data-testid="link-guest-all-courses">All courses <ArrowRight className="ml-1 inline" size={13} /></Link></div>
+      {courses.isLoading ? <LoadingState rows={2} /> : courses.isError ? <ErrorState onRetry={() => courses.refetch()} /> : items.length === 0
+        ? <EmptyState title="Courses are on their way" copy="New courses are being prepared. Check back soon." />
+        : <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">{items.slice(0, 6).map(c => <CourseCard key={c.id} course={c} />)}</div>}
+    </section>
+
+    <section className="flex flex-col items-start justify-between gap-5 rounded-xl bg-[hsl(var(--sidebar))] p-8 text-[hsl(var(--sidebar-foreground))] sm:flex-row sm:items-center sm:p-10">
+      <div><h2 className="font-display text-2xl font-bold sm:text-3xl">Ready to build something real?</h2><p className="mt-2 text-sm text-[hsl(var(--sidebar-foreground)/.7)]">Create a free account in a minute. You only pay when you unlock a module.</p></div>
+      <Link href={loginHref('/', 'register')} className={`${heroCta} shrink-0`} data-testid="link-guest-cta">Create a free account <ArrowRight size={15} /></Link>
+    </section>
+  </div>;
+}
+
+function HomePage() {
+  const dashboard = useGetStudentDashboard();
   const data = dashboard.data as StudentDashboard | undefined;
   if (dashboard.isLoading) return <><PageTitle eyebrow="Your learning space" title="Good things take practice." /><LoadingState rows={4} /></>;
   if (dashboard.isError || !data) return <><PageTitle eyebrow="Your learning space" title="Good things take practice." /><ErrorState onRetry={() => dashboard.refetch()} /></>;
   const current = data.enrolledCourses?.[0];
   return <div className="space-y-10">
-    {/* Edge to edge under the menu. With a photo it fills the screen: the photo covers it all, darkened
-        behind the text (from the left on computers, from the bottom on phones and tablets). */}
-    <section className={`animate-rise relative -mt-7 ml-[calc(50%-50vw)] flex w-screen overflow-hidden bg-[hsl(var(--sidebar))] text-[hsl(var(--sidebar-foreground))] sm:-mt-10 ${heroImage ? 'min-h-[calc(100dvh-136px)] lg:min-h-[calc(100dvh-68px)]' : ''}`} data-testid="section-hero">
-      {heroImage
-        ? <><img src={heroImage} alt="" className={`absolute inset-0 size-full object-cover object-[center_25%] ${heroFlip ? '-scale-x-100' : ''}`} data-testid="img-hero" />
-          <div className="absolute inset-0 bg-gradient-to-t from-[hsl(var(--sidebar))] from-[38%] via-[hsl(var(--sidebar)/.55)] via-[62%] to-[hsl(var(--sidebar)/.05)] lg:bg-gradient-to-r lg:from-[hsl(var(--sidebar)/.95)] lg:from-[22%] lg:via-[hsl(var(--sidebar)/.5)] lg:via-[48%] lg:to-transparent lg:to-[75%] 2xl:from-[32%] 2xl:via-[56%] 2xl:to-[85%]" /></>
-        : <><div className="absolute -top-28 right-[8%] size-80 rounded-full border-[40px] border-[hsl(var(--accent)/.1)]" /><div className="absolute -bottom-28 right-[22%] size-48 rounded-full border-[20px] border-[hsl(var(--accent)/.08)]" /></>}
-      <div className={`relative mx-auto flex w-full max-w-[1320px] flex-col px-5 sm:px-8 lg:px-10 ${heroImage ? 'justify-end pb-10 pt-40 sm:pb-14 lg:justify-center lg:py-16' : 'py-10 sm:py-14'}`}>
-        <div className="max-w-2xl"><p className="mb-4 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.2em] text-[hsl(var(--accent))]"><span className="size-1.5 rounded-full bg-[hsl(var(--accent))]" /> Student overview</p><h1 className="font-display text-4xl font-bold tracking-tight sm:text-5xl">Hi, {data.studentName.split(' ')[0]}.<br /><span className="text-[hsl(var(--accent))]">Build something real.</span></h1><p className="mt-5 max-w-md text-sm leading-6 text-[hsl(var(--sidebar-foreground)/.68)]">Small, consistent steps are adding up. Pick up where you left off or find a skill for your next chapter.</p><Link href={current ? `/courses/${current.id}` : '/courses'} className="mt-7 inline-flex items-center gap-2 rounded-md bg-[hsl(var(--accent))] px-4 py-3 text-xs font-extrabold text-[hsl(var(--accent-foreground))] transition hover:-translate-y-0.5" data-testid="link-hero-continue">{current ? 'Continue learning' : 'Explore the school'} <ArrowRight size={15} /></Link></div>
-        <div className={`mt-9 flex gap-6 border-t border-white/10 pt-5 sm:absolute sm:bottom-10 sm:right-8 sm:mt-0 sm:border-0 sm:pt-0 lg:right-10 ${heroImage ? 'sm:rounded-lg sm:bg-black/45 sm:px-5 sm:py-3 sm:backdrop-blur-sm' : ''}`}><div><p className="font-mono-ui text-2xl font-medium text-[hsl(var(--accent))]">{data.streakDays}</p><p className="mt-1 text-[10px] text-white/55">day streak</p></div><div><p className="font-mono-ui text-2xl font-medium">{data.activeCourseCount}</p><p className="mt-1 text-[10px] text-white/55">active courses</p></div></div>
-      </div>
-    </section>
+    <HeroBanner aside={<><div><p className="font-mono-ui text-2xl font-medium text-[hsl(var(--accent))]">{data.streakDays}</p><p className="mt-1 text-[10px] text-white/55">day streak</p></div><div><p className="font-mono-ui text-2xl font-medium">{data.activeCourseCount}</p><p className="mt-1 text-[10px] text-white/55">active courses</p></div></>}>
+      <p className="mb-4 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.2em] text-[hsl(var(--accent))]"><span className="size-1.5 rounded-full bg-[hsl(var(--accent))]" /> Student overview</p><h1 className="font-display text-4xl font-bold tracking-tight sm:text-5xl">Hi, {data.studentName.split(' ')[0]}.<br /><span className="text-[hsl(var(--accent))]">Build something real.</span></h1><p className="mt-5 max-w-md text-sm leading-6 text-[hsl(var(--sidebar-foreground)/.68)]">Small, consistent steps are adding up. Pick up where you left off or find a skill for your next chapter.</p><Link href={current ? `/courses/${current.id}` : '/courses'} className="mt-7 inline-flex items-center gap-2 rounded-md bg-[hsl(var(--accent))] px-4 py-3 text-xs font-extrabold text-[hsl(var(--accent-foreground))] transition hover:-translate-y-0.5" data-testid="link-hero-continue">{current ? 'Continue learning' : 'Explore the school'} <ArrowRight size={15} /></Link>
+    </HeroBanner>
     <section className="animate-rise-2 grid gap-4 sm:grid-cols-3">
       {[{ label: 'Paid towards learning', value: money(data.totalPaid), icon: CreditCard, tint: 'text-[hsl(var(--primary))]' }, { label: 'Active courses', value: String(data.activeCourseCount).padStart(2, '0'), icon: BarChart3, tint: 'text-[hsl(var(--accent-foreground))]' }, { label: 'Courses completed', value: String(data.completedCourseCount).padStart(2, '0'), icon: Check, tint: 'text-[hsl(var(--link))]' }].map(({ label, value, icon: Icon, tint }) => <div className="flex items-center justify-between rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-5 shadow-soft" key={label}><div><p className="text-[10px] font-bold uppercase tracking-[.12em] text-[hsl(var(--muted-foreground))]">{label}</p><p className={`mt-2 font-mono-ui text-xl font-medium ${tint}`}>{value}</p></div><div className="grid size-10 place-items-center rounded-md bg-[hsl(var(--secondary))]"><Icon size={18} /></div></div>)}
     </section>
@@ -370,7 +426,7 @@ function AppRouter() {
       <Route path="/register">{() => <AuthPage mode="register" />}</Route>
       <Route path="/forgot-password" component={ForgotPasswordPage} />
       <Route path="/reset-password" component={ResetPasswordPage} />
-      <Route path="/"><Redirect to="/courses" /></Route>
+      <Route path="/"><Shell><ErrorBoundary><GuestHomePage /></ErrorBoundary></Shell></Route>
       <Route path="/courses"><Shell><ErrorBoundary><CoursesPage /></ErrorBoundary></Shell></Route>
       <Route path="/courses/:id"><Shell><ErrorBoundary><DetailPage /></ErrorBoundary></Shell></Route>
       <Route path="/verify/:code?"><Shell><ErrorBoundary><VerifyPage /></ErrorBoundary></Shell></Route>
