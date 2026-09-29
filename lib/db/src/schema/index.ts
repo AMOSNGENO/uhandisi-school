@@ -212,6 +212,11 @@ export const lessonCompletionsTable = mysqlTable("lesson_completions", {
   completedAt: datetime("completed_at").notNull(),
 });
 
+export const siteSettingsTable = mysqlTable("site_settings", {
+  name: varchar("name", { length: 64 }).primaryKey(),
+  value: text("value").notNull(),
+});
+
 export const passwordResetsTable = mysqlTable("password_resets", {
   tokenHash: varchar("token_hash", { length: 64 }).primaryKey(),
   userId: int("user_id").notNull(),

@@ -22,6 +22,8 @@ import AdminPaymentsPage from '@/pages/admin/payments';
 import AdminMoodlePage from '@/pages/admin/moodle';
 import AdminCertificatesPage from '@/pages/admin/certificates';
 import CertificateEditorPage from '@/pages/admin/certificate-editor';
+import AdminSettingsPage from '@/pages/admin/settings';
+import { useSiteSettings } from '@/lib/site';
 import NotFound from '@/pages/not-found';
 import ModulePage from '@/pages/module';
 import { CertificatesPage, VerifyPage } from '@/pages/certificates';
@@ -176,15 +178,20 @@ function ProgressBar({ value, light = false }: { value: number; light?: boolean 
 
 function HomePage() {
   const dashboard = useGetStudentDashboard();
+  const heroImage = useSiteSettings().data?.heroImageUrl;
   const data = dashboard.data as StudentDashboard | undefined;
   if (dashboard.isLoading) return <><PageTitle eyebrow="Your learning space" title="Good things take practice." /><LoadingState rows={4} /></>;
   if (dashboard.isError || !data) return <><PageTitle eyebrow="Your learning space" title="Good things take practice." /><ErrorState onRetry={() => dashboard.refetch()} /></>;
   const current = data.enrolledCourses?.[0];
   return <div className="space-y-10">
-    <section className="animate-rise relative overflow-hidden rounded-xl bg-[hsl(var(--sidebar))] px-6 py-8 text-[hsl(var(--sidebar-foreground))] sm:px-10 sm:py-10">
-      <div className="absolute -right-20 -top-28 size-80 rounded-full border-[40px] border-[hsl(var(--accent)/.1)]" /><div className="absolute -bottom-28 right-24 size-48 rounded-full border-[20px] border-[hsl(var(--accent)/.08)]" />
+    <section className={`animate-rise relative overflow-hidden rounded-xl bg-[hsl(var(--sidebar))] px-6 py-8 text-[hsl(var(--sidebar-foreground))] sm:px-10 sm:py-10 ${heroImage ? 'pt-52 sm:min-h-[340px] sm:pt-10' : ''}`} data-testid="section-hero">
+      {/* Phones: the photo is a strip across the top that fades into the banner. Wider screens: it fills the banner, darkened on the left behind the text. */}
+      {heroImage
+        ? <><img src={heroImage} alt="" className="absolute inset-x-0 top-0 h-52 w-full object-cover sm:inset-0 sm:h-full" data-testid="img-hero" />
+          <div className="absolute inset-x-0 top-0 h-52 bg-gradient-to-b from-transparent via-transparent to-[hsl(var(--sidebar))] sm:inset-0 sm:h-full sm:bg-gradient-to-r sm:from-[hsl(var(--sidebar)/.97)] sm:via-[hsl(var(--sidebar)/.8)] sm:to-[hsl(var(--sidebar)/.05)]" /></>
+        : <><div className="absolute -right-20 -top-28 size-80 rounded-full border-[40px] border-[hsl(var(--accent)/.1)]" /><div className="absolute -bottom-28 right-24 size-48 rounded-full border-[20px] border-[hsl(var(--accent)/.08)]" /></>}
       <div className="relative max-w-2xl"><p className="mb-4 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.2em] text-[hsl(var(--accent))]"><span className="size-1.5 rounded-full bg-[hsl(var(--accent))]" /> Student overview</p><h1 className="font-display text-4xl font-bold tracking-tight sm:text-5xl">Hi, {data.studentName.split(' ')[0]}.<br /><span className="text-[hsl(var(--accent))]">Build something real.</span></h1><p className="mt-5 max-w-md text-sm leading-6 text-[hsl(var(--sidebar-foreground)/.68)]">Small, consistent steps are adding up. Pick up where you left off or find a skill for your next chapter.</p><Link href={current ? `/courses/${current.id}` : '/courses'} className="mt-7 inline-flex items-center gap-2 rounded-md bg-[hsl(var(--accent))] px-4 py-3 text-xs font-extrabold text-[hsl(var(--accent-foreground))] transition hover:-translate-y-0.5" data-testid="link-hero-continue">{current ? 'Continue learning' : 'Explore the school'} <ArrowRight size={15} /></Link></div>
-      <div className="relative mt-9 flex gap-6 border-t border-white/10 pt-5 sm:absolute sm:bottom-8 sm:right-10 sm:mt-0 sm:border-0 sm:pt-0"><div><p className="font-mono-ui text-2xl font-medium text-[hsl(var(--accent))]">{data.streakDays}</p><p className="mt-1 text-[10px] text-white/55">day streak</p></div><div><p className="font-mono-ui text-2xl font-medium">{data.activeCourseCount}</p><p className="mt-1 text-[10px] text-white/55">active courses</p></div></div>
+      <div className={`relative mt-9 flex gap-6 border-t border-white/10 pt-5 sm:absolute sm:bottom-8 sm:right-10 sm:mt-0 sm:border-0 sm:pt-0 ${heroImage ? 'sm:rounded-lg sm:bg-black/45 sm:px-5 sm:py-3 sm:backdrop-blur-sm' : ''}`}><div><p className="font-mono-ui text-2xl font-medium text-[hsl(var(--accent))]">{data.streakDays}</p><p className="mt-1 text-[10px] text-white/55">day streak</p></div><div><p className="font-mono-ui text-2xl font-medium">{data.activeCourseCount}</p><p className="mt-1 text-[10px] text-white/55">active courses</p></div></div>
     </section>
     <section className="animate-rise-2 grid gap-4 sm:grid-cols-3">
       {[{ label: 'Paid towards learning', value: money(data.totalPaid), icon: CreditCard, tint: 'text-[hsl(var(--primary))]' }, { label: 'Active courses', value: String(data.activeCourseCount).padStart(2, '0'), icon: BarChart3, tint: 'text-[hsl(var(--accent-foreground))]' }, { label: 'Courses completed', value: String(data.completedCourseCount).padStart(2, '0'), icon: Check, tint: 'text-[hsl(var(--link))]' }].map(({ label, value, icon: Icon, tint }) => <div className="flex items-center justify-between rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-5 shadow-soft" key={label}><div><p className="text-[10px] font-bold uppercase tracking-[.12em] text-[hsl(var(--muted-foreground))]">{label}</p><p className={`mt-2 font-mono-ui text-xl font-medium ${tint}`}>{value}</p></div><div className="grid size-10 place-items-center rounded-md bg-[hsl(var(--secondary))]"><Icon size={18} /></div></div>)}
@@ -382,6 +389,7 @@ function AppRouter() {
     <Route path="/admin/moodle">{() => <AdminOnly><AdminMoodlePage /></AdminOnly>}</Route>
     <Route path="/admin/certificates">{() => <AdminOnly><AdminCertificatesPage /></AdminOnly>}</Route>
     <Route path="/admin/certificates/:id">{() => <AdminOnly><CertificateEditorPage /></AdminOnly>}</Route>
+    <Route path="/admin/settings">{() => <AdminOnly><AdminSettingsPage /></AdminOnly>}</Route>
     <Route component={NotFound} />
   </Switch></ErrorBoundary></Shell>;
 }

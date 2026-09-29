@@ -1,7 +1,7 @@
 // Shared pieces for the admin portal: layout, styles, dialogs, uploads.
 import { type ReactNode, lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'wouter';
-import { Award, BarChart3, BookOpen, CreditCard, DownloadCloud, FolderTree, ImagePlus, UserRound, X } from 'lucide-react';
+import { Award, BarChart3, BookOpen, CreditCard, DownloadCloud, FolderTree, ImagePlus, Settings, UserRound, X } from 'lucide-react';
 import { ApiError } from '@/lib/auth';
 import { ACCEPTED_IMAGES, uploadFile } from '@/lib/upload';
 
@@ -29,6 +29,7 @@ const sections = [
   { href: '/admin/payments', label: 'Payments', icon: CreditCard },
   { href: '/admin/certificates', label: 'Certificates', icon: Award },
   { href: '/admin/moodle', label: 'Import from Moodle', icon: DownloadCloud },
+  { href: '/admin/settings', label: 'Site settings', icon: Settings },
 ];
 
 /** Site administration layout: section sidebar on the left (a scrolling tab row on phones). */
@@ -142,7 +143,9 @@ export function FileDrop({ accept, hintText, busy, progress, onFile, testId, chi
   </div>;
 }
 
-export function ImageUpload({ value, onChange }: { value: string; onChange: (url: string) => void }) {
+export function ImageUpload({ value, onChange, title = 'Course image', testId = 'input-course-image', previewClass = 'h-28 w-48', note }: {
+  value: string; onChange: (url: string) => void; title?: string; testId?: string; previewClass?: string; note?: string;
+}) {
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -153,18 +156,18 @@ export function ImageUpload({ value, onChange }: { value: string; onChange: (url
     try { onChange(await uploadFile(file)); } catch (e) { setError(e instanceof Error ? e.message : 'Upload failed.'); } finally { setBusy(false); if (input.current) input.current.value = ''; }
   };
   return <div className={label}>
-    <p className="mb-1.5">Course image</p>
+    <p className="mb-1.5">{title}</p>
     <div className="flex flex-wrap items-center gap-4" onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); pick(e.dataTransfer.files[0]); }}>
-      <div className="grid h-28 w-48 shrink-0 place-items-center overflow-hidden rounded-md border border-dashed border-[hsl(var(--input))] bg-[hsl(var(--secondary))]">
-        {value ? <img src={value} alt="Course image preview" className="size-full object-cover" /> : <ImagePlus size={24} className="text-[hsl(var(--muted-foreground))]" />}
+      <div className={`grid max-w-full shrink-0 place-items-center overflow-hidden rounded-md border border-dashed border-[hsl(var(--input))] bg-[hsl(var(--secondary))] ${previewClass}`}>
+        {value ? <img src={value} alt={`${title} preview`} className="size-full object-cover" /> : <ImagePlus size={24} className="text-[hsl(var(--muted-foreground))]" />}
       </div>
       <div className="space-y-2">
-        <input ref={input} type="file" accept={ACCEPTED_IMAGES} className="hidden" onChange={e => pick(e.target.files?.[0])} data-testid="input-course-image" />
+        <input ref={input} type="file" accept={ACCEPTED_IMAGES} className="hidden" onChange={e => pick(e.target.files?.[0])} data-testid={testId} />
         <div className="flex flex-wrap gap-2">
           <button type="button" disabled={busy} onClick={() => input.current?.click()} className={primaryBtn} data-testid="button-upload-image"><ImagePlus size={14} /> {busy ? 'Uploading…' : value ? 'Replace image' : 'Upload image'}</button>
           {value && <button type="button" onClick={() => onChange('')} className={ghostBtn}>Remove</button>}
         </div>
-        <p className={hint}>PNG, JPEG, GIF or WebP, up to 10 MB. You can also drop a file here.</p>
+        <p className={hint}>{note ?? 'PNG, JPEG, GIF or WebP, up to 10 MB. You can also drop a file here.'}</p>
         {error && <p className="font-normal text-[hsl(var(--destructive))]" role="alert">{error}</p>}
       </div>
     </div>

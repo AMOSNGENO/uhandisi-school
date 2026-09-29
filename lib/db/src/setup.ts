@@ -150,6 +150,11 @@ const tables = [
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (lesson_id) REFERENCES lessons(id) ON DELETE CASCADE
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+  // Site-wide settings an admin can change (homepage hero image, ...), one row per setting.
+  `CREATE TABLE IF NOT EXISTS site_settings (
+    name VARCHAR(64) PRIMARY KEY,
+    value TEXT NOT NULL
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
   // One-time password reset links. Only a SHA-256 of the token is stored.
   `CREATE TABLE IF NOT EXISTS password_resets (
     token_hash CHAR(64) PRIMARY KEY,

@@ -10,6 +10,7 @@ import contentRouter from "./content";
 import adminMoodleRouter from "./admin-moodle";
 import examsRouter from "./exams";
 import adminCertificatesRouter from "./admin-certificates";
+import siteSettingsRouter from "./site-settings";
 
 const router: IRouter = Router();
 
@@ -23,6 +24,7 @@ router.use(contentRouter);
 router.use(adminMoodleRouter);
 router.use(examsRouter);
 router.use(adminCertificatesRouter);
+router.use(siteSettingsRouter);
 router.use(adminRouter);
 
 export default router;
