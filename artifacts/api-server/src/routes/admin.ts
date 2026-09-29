@@ -9,6 +9,8 @@ import { removeStored } from "../lib/storage";
 import { clearAccessCache } from "../lib/access";
 import { paymentsFor } from "../lib/courses";
 import { isMpesaConfigured, MpesaError, mpesaStatus, queryStkStatus } from "../lib/mpesa";
+import { isMailConfigured, publicOrigin } from "../lib/mailer";
+import { createResetToken, resetUrl, sendResetEmail } from "../lib/password-reset";
 import { applyMpesaResult } from "./payments";
 
 const router: IRouter = Router();
@@ -113,6 +115,19 @@ router.post("/admin/users/:id/password", async (req, res) => {
   if (!result.affectedRows) return void res.status(404).json({ error: "User not found" });
   if (id.data !== req.user!.id) await db.delete(sessionsTable).where(eq(sessionsTable.userId, id.data));
   res.status(204).end();
+});
+
+// A reset link for someone who forgot their password. It's emailed when email is set up, and
+// always returned so the admin can pass it on (WhatsApp, SMS) until then.
+router.post("/admin/users/:id/reset-link", async (req, res) => {
+  const id = Id.safeParse(req.params.id);
+  if (!id.success) return void res.status(400).json({ error: "Invalid user id" });
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, id.data)).limit(1);
+  if (!user) return void res.status(404).json({ error: "User not found" });
+  if (!user.active) return void res.status(400).json({ error: "This account is suspended. Reactivate it first." });
+  const url = resetUrl(publicOrigin(req), (await createResetToken(user.id, { force: true }))!);
+  const emailed = await sendResetEmail(user, url);
+  res.json({ url, emailed, emailConfigured: isMailConfigured() });
 });
 
 router.delete("/admin/users/:id", async (req, res) => {

@@ -1,8 +1,10 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { z } from "zod";
-import { db, hashPassword, usersTable, verifyPassword } from "@workspace/db";
-import { endSession, startSession, toPublicUser } from "../lib/auth";
+import { db, hashPassword, sessionsTable, usersTable, verifyPassword } from "@workspace/db";
+import { endSession, requireAuth, SESSION_COOKIE, startSession, toPublicUser } from "../lib/auth";
+import { publicOrigin } from "../lib/mailer";
+import { completeReset, createResetToken, maskEmail, resetUrl, sendResetEmail, userForToken } from "../lib/password-reset";
 
 const router: IRouter = Router();
 
@@ -69,6 +71,72 @@ router.get("/auth/me", (req, res) => {
     return;
   }
   res.json(req.user);
+});
+
+// Students edit their own name and phone; the email is their login, so only an admin changes it.
+router.patch("/auth/me", requireAuth, async (req, res) => {
+  const body = z.object({
+    name: z.string().trim().min(2).max(120).optional(),
+    phone: z.string().trim().max(30).nullable().optional(),
+  }).safeParse(req.body);
+  if (!body.success) return void res.status(400).json({ error: "Enter your full name (at least 2 characters)." });
+  const changes = { ...body.data, ...(body.data.phone !== undefined ? { phone: body.data.phone || null } : {}) };
+  if (Object.keys(changes).length) await db.update(usersTable).set(changes).where(eq(usersTable.id, req.user!.id));
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.id)).limit(1);
+  res.json(toPublicUser(user!));
+});
+
+const NewPassword = z.string().min(8, "The new password must be at least 8 characters.").max(200);
+
+// Changing the password keeps this browser signed in and logs every other device out.
+router.post("/auth/password", requireAuth, async (req, res) => {
+  const body = z.object({ currentPassword: z.string().min(1, "Enter your current password."), newPassword: NewPassword }).safeParse(req.body);
+  if (!body.success) return void res.status(400).json({ error: body.error.issues[0]!.message });
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.id)).limit(1);
+  if (!user || !(await verifyPassword(body.data.currentPassword, user.passwordHash))) {
+    return void res.status(400).json({ error: "Your current password is not right." });
+  }
+  await db.update(usersTable).set({ passwordHash: await hashPassword(body.data.newPassword) }).where(eq(usersTable.id, user.id));
+  const current = req.cookies?.[SESSION_COOKIE];
+  await db.delete(sessionsTable).where(and(eq(sessionsTable.userId, user.id), typeof current === "string" ? ne(sessionsTable.id, current) : undefined));
+  res.status(204).end();
+});
+
+// Forgot password: emails a one-time link. The reply is the same whether or not the email has an
+// account, so this can't be used to find out who studies here.
+const forgotHits = new Map<string, number[]>();
+router.post("/auth/forgot-password", async (req, res) => {
+  const ip = req.ip ?? "?";
+  const now = Date.now();
+  const hits = (forgotHits.get(ip) ?? []).filter((t) => now - t < 15 * 60 * 1000);
+  if (hits.length >= 10) return void res.status(429).json({ error: "Too many requests. Wait a few minutes and try again." });
+  if (forgotHits.size > 5000) forgotHits.clear();
+  forgotHits.set(ip, [...hits, now]);
+
+  const email = z.string().trim().toLowerCase().email().max(190).safeParse(req.body?.email);
+  if (!email.success) return void res.status(400).json({ error: "Enter the email address you signed up with." });
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.email, email.data)).limit(1);
+  if (user?.active) {
+    const token = await createResetToken(user.id);
+    if (token) await sendResetEmail(user, resetUrl(publicOrigin(req), token));
+  }
+  res.json({ ok: true });
+});
+
+// The reset page checks its link first, so an old one says so before the student types anything.
+router.get("/auth/reset-password/:token", async (req, res) => {
+  const user = await userForToken(req.params.token);
+  if (!user) return void res.status(404).json({ error: "This reset link has expired or was already used. Ask for a new one." });
+  res.json({ email: maskEmail(user.email) });
+});
+
+router.post("/auth/reset-password", async (req, res) => {
+  const body = z.object({ token: z.string(), password: NewPassword }).safeParse(req.body);
+  if (!body.success) return void res.status(400).json({ error: body.error.issues[0]!.message });
+  const user = await completeReset(body.data.token, body.data.password);
+  if (!user) return void res.status(404).json({ error: "This reset link has expired or was already used. Ask for a new one." });
+  await startSession(res, user.id);
+  res.json(toPublicUser(user));
 });
 
 export default router;

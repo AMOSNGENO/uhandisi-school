@@ -211,3 +211,11 @@ export const lessonCompletionsTable = mysqlTable("lesson_completions", {
   lessonId: int("lesson_id").notNull(),
   completedAt: datetime("completed_at").notNull(),
 });
+
+export const passwordResetsTable = mysqlTable("password_resets", {
+  tokenHash: varchar("token_hash", { length: 64 }).primaryKey(),
+  userId: int("user_id").notNull(),
+  createdAt: datetime("created_at").notNull(),
+  expiresAt: datetime("expires_at").notNull(),
+  usedAt: datetime("used_at"),
+});

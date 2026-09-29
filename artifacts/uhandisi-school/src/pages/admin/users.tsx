@@ -1,6 +1,6 @@
 import { type FormEvent, useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { KeyRound, Search, Trash2, UserPlus } from 'lucide-react';
+import { KeyRound, Link2, Search, Trash2, UserPlus } from 'lucide-react';
 import { api, useCurrentUser, type Role } from '@/lib/auth';
 import type { AdminUser } from './types';
 import { AdminLayout, Badge, card, dangerBtn, ErrorNote, field, ghostBtn, hint, label, Loading, Modal, primaryBtn, shortDate, td, th } from './ui';
@@ -103,6 +103,7 @@ function EditUser({ user, self, onClose }: { user: AdminUser; self: boolean; onC
     mutationFn: () => api(`/admin/users/${user.id}/password`, { method: 'POST', body: { password } }),
     onSuccess: () => { setNotice(`Password changed. ${self ? '' : 'They have been signed out everywhere; '}share the new one with them: ${password}`); setPassword(''); },
   });
+  const resetLink = useMutation({ mutationFn: () => api<{ url: string; emailed: boolean; emailConfigured: boolean }>(`/admin/users/${user.id}/reset-link`, { method: 'POST' }) });
   const remove = useMutation({ mutationFn: () => api(`/admin/users/${user.id}`, { method: 'DELETE' }), onSuccess: () => { refresh(); onClose(); } });
   const set = (k: 'name' | 'email' | 'phone' | 'role') => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm(f => ({ ...f, [k]: e.target.value }));
 
@@ -122,6 +123,17 @@ function EditUser({ user, self, onClose }: { user: AdminUser; self: boolean; onC
         <ErrorNote error={save.error} />
         <div className="flex justify-end"><button disabled={save.isPending} className={primaryBtn} data-testid="button-save-user">Save changes</button></div>
       </form>
+      {!self && user.active && <div className="space-y-3 border-t border-[hsl(var(--border))] pt-5">
+        <div className="flex items-center justify-between gap-3">
+          <div><h3 className="flex items-center gap-2 text-sm font-bold"><Link2 size={15} /> Password reset link</h3><p className={`${hint} mt-1 text-xs`}>Lets them choose their own password. Works once, for one hour.</p></div>
+          <button type="button" disabled={resetLink.isPending} onClick={() => resetLink.mutate()} className={ghostBtn} data-testid="button-reset-link">{resetLink.isPending ? 'Creating…' : 'Create link'}</button>
+        </div>
+        {resetLink.data && <div className="space-y-2 rounded-md bg-[hsl(var(--secondary))] p-3 text-xs" role="status" data-testid="reset-link">
+          <p>{resetLink.data.emailed ? <>Emailed to <b>{user.email}</b>. You can also send them this link:</> : resetLink.data.emailConfigured ? <>The email couldn’t be sent (see the server log). Send them this link on WhatsApp or SMS:</> : <>Email isn’t set up yet, so send them this link on WhatsApp or SMS:</>}</p>
+          <div className="flex gap-2"><input readOnly value={resetLink.data.url} onFocus={e => e.target.select()} className={`${field} mt-0 font-mono-ui text-xs`} aria-label="Reset link" /><button type="button" onClick={() => navigator.clipboard?.writeText(resetLink.data!.url)} className={ghostBtn}>Copy</button></div>
+        </div>}
+        <ErrorNote error={resetLink.error} />
+      </div>}
       <form onSubmit={e => { e.preventDefault(); reset.mutate(); }} className="space-y-3 border-t border-[hsl(var(--border))] pt-5">
         <h3 className="flex items-center gap-2 text-sm font-bold"><KeyRound size={15} /> Set a new password</h3>
         <div className="flex gap-2"><input required minLength={8} value={password} onChange={e => setPassword(e.target.value)} className={`${field} mt-0 font-mono-ui`} placeholder="At least 8 characters" aria-label="New password" data-testid="input-reset-password" /><button type="button" onClick={() => setPassword(newPassword())} className={ghostBtn}>Generate</button><button disabled={reset.isPending} className={primaryBtn} data-testid="button-reset-password">Set</button></div>

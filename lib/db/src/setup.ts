@@ -150,6 +150,16 @@ const tables = [
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (lesson_id) REFERENCES lessons(id) ON DELETE CASCADE
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+  // One-time password reset links. Only a SHA-256 of the token is stored.
+  `CREATE TABLE IF NOT EXISTS password_resets (
+    token_hash CHAR(64) PRIMARY KEY,
+    user_id INT NOT NULL,
+    created_at DATETIME NOT NULL,
+    expires_at DATETIME NOT NULL,
+    used_at DATETIME NULL,
+    INDEX (user_id),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
   `CREATE TABLE IF NOT EXISTS enrollments (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,

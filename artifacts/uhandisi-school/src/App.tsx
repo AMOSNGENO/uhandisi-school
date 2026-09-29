@@ -25,6 +25,7 @@ import CertificateEditorPage from '@/pages/admin/certificate-editor';
 import NotFound from '@/pages/not-found';
 import ModulePage from '@/pages/module';
 import { CertificatesPage, VerifyPage } from '@/pages/certificates';
+import { AccountDetails, ChangePassword, ForgotPasswordPage, ResetPasswordPage } from '@/pages/password';
 import RichContent from '@/components/rich-content';
 import '@/index.css';
 
@@ -326,10 +327,12 @@ function PaymentRow({ payment }: { payment: Payment }) {
 }
 
  function ProfilePage() {
-  const user = useCurrentUser().data;
   const [reminders, setReminders] = useState(true);
   const [digest, setDigest] = useState(false);
-  return <><PageTitle eyebrow="Your account" title="Profile & preferences" copy="Keep your learning space feeling like yours." /><div className="grid gap-6 lg:grid-cols-[.8fr_1.2fr]"><section className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-6 shadow-soft"><div className="flex items-center gap-4"><span className="grid size-16 place-items-center rounded-lg bg-[hsl(var(--primary))] font-display text-2xl font-bold text-[hsl(var(--primary-foreground))]">{initials(user?.name)}</span><div className="min-w-0"><h2 className="truncate font-display text-xl font-bold">{user?.name}</h2><p className="mt-1 truncate text-xs text-[hsl(var(--muted-foreground))]">{user?.email}</p></div></div><div className="mt-7 space-y-4 border-t border-[hsl(var(--border))] pt-5"><div><p className="text-[10px] font-bold uppercase tracking-[.15em] text-[hsl(var(--muted-foreground))]">Phone number</p><p className="mt-1 text-sm font-semibold">{user?.phone || 'Not added'}</p></div><div><p className="text-[10px] font-bold uppercase tracking-[.15em] text-[hsl(var(--muted-foreground))]">Learning goal</p><p className="mt-1 text-sm font-semibold">Build practical digital skills</p></div></div><button className="mt-6 flex w-full items-center justify-center gap-2 rounded-md border border-[hsl(var(--border))] py-3 text-xs font-bold" data-testid="button-edit-profile"><UserRound size={15} /> Edit profile</button></section><section className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-6 shadow-soft"><h2 className="font-display text-xl font-bold">Learning preferences</h2><p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">Helpful nudges, never noise.</p><div className="mt-6 divide-y divide-[hsl(var(--border))]"><PreferenceRow icon={Flame} title="Keep my streak alive" copy="A gentle reminder when you have not learned today." enabled={reminders} onChange={() => setReminders(!reminders)} testId="switch-streak" /><PreferenceRow icon={ReceiptText} title="Payment confirmations" copy="Get a message when your payment is confirmed." enabled={true} onChange={() => {}} disabled testId="switch-payments" /><PreferenceRow icon={BookOpen} title="Weekly learning digest" copy="A simple look at what you have achieved." enabled={digest} onChange={() => setDigest(!digest)} testId="switch-digest" /></div><div className="mt-6 flex items-start gap-3 rounded-md bg-[hsl(var(--secondary)/.6)] p-4"><ShieldCheck size={17} className="mt-0.5 shrink-0 text-[hsl(var(--primary))]" /><p className="text-xs leading-5 text-[hsl(var(--muted-foreground))]">Your account and payment information are kept private and secure.</p></div></section></div></>;
+  return <><PageTitle eyebrow="Your account" title="Profile & preferences" copy="Keep your details up to date and your account secure." />
+    <div className="grid gap-6 lg:grid-cols-2"><AccountDetails /><ChangePassword /></div>
+    <div className="mt-6"><section className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-6 shadow-soft"><h2 className="font-display text-xl font-bold">Learning preferences</h2><p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">Helpful nudges, never noise.</p><div className="mt-6 divide-y divide-[hsl(var(--border))]"><PreferenceRow icon={Flame} title="Keep my streak alive" copy="A gentle reminder when you have not learned today." enabled={reminders} onChange={() => setReminders(!reminders)} testId="switch-streak" /><PreferenceRow icon={ReceiptText} title="Payment confirmations" copy="Get a message when your payment is confirmed." enabled={true} onChange={() => {}} disabled testId="switch-payments" /><PreferenceRow icon={BookOpen} title="Weekly learning digest" copy="A simple look at what you have achieved." enabled={digest} onChange={() => setDigest(!digest)} testId="switch-digest" /></div><div className="mt-6 flex items-start gap-3 rounded-md bg-[hsl(var(--secondary)/.6)] p-4"><ShieldCheck size={17} className="mt-0.5 shrink-0 text-[hsl(var(--primary))]" /><p className="text-xs leading-5 text-[hsl(var(--muted-foreground))]">Your account and payment information are kept private and secure.</p></div></section></div>
+  </>;
 }
 function PreferenceRow({ icon: Icon, title, copy, enabled, onChange, disabled, testId }: { icon: typeof Flame; title: string; copy: string; enabled: boolean; onChange: () => void; disabled?: boolean; testId: string }) {
   return <div className="flex items-center gap-3 py-5"><span className="grid size-9 shrink-0 place-items-center rounded-md bg-[hsl(var(--secondary))] text-[hsl(var(--primary))]"><Icon size={16} /></span><div className="min-w-0 flex-1"><p className="text-sm font-bold">{title}</p><p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{copy}</p></div><button onClick={onChange} disabled={disabled} className={`relative h-6 w-11 shrink-0 rounded-full transition ${enabled ? 'bg-[hsl(var(--primary))]' : 'bg-[hsl(var(--muted))]'} disabled:opacity-50`} aria-label={title} data-testid={testId}><span className={`absolute top-1 size-4 rounded-full bg-[hsl(var(--card))] transition-all ${enabled ? 'left-6' : 'left-1'}`} /></button></div>;
@@ -353,6 +356,8 @@ function AppRouter() {
     return <Switch>
       <Route path="/login">{() => <AuthPage mode="login" />}</Route>
       <Route path="/register">{() => <AuthPage mode="register" />}</Route>
+      <Route path="/forgot-password" component={ForgotPasswordPage} />
+      <Route path="/reset-password" component={ResetPasswordPage} />
       <Route path="/"><Redirect to="/courses" /></Route>
       <Route path="/courses"><Shell><ErrorBoundary><CoursesPage /></ErrorBoundary></Shell></Route>
       <Route path="/courses/:id"><Shell><ErrorBoundary><DetailPage /></ErrorBoundary></Shell></Route>
@@ -361,6 +366,8 @@ function AppRouter() {
     </Switch>;
   }
   if (location === '/login' || location === '/register') return <Redirect to={user.role === 'admin' ? '/admin' : '/'} />;
+  if (location === '/forgot-password') return <Redirect to="/profile" />;
+  if (location === '/reset-password') return <ResetPasswordPage />;
 
   return <Shell><ErrorBoundary><Switch>
     <Route path="/" component={HomePage} /><Route path="/courses" component={CoursesPage} /><Route path="/courses/:id/modules/:moduleId" component={ModulePage} /><Route path="/courses/:id" component={DetailPage} />
