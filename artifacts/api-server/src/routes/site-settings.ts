@@ -11,14 +11,23 @@ const ImageUrl = z.string().trim().max(500).refine((u) => u === "" || /^\/api\/u
 // Every setting, its type and default. Add new ones here.
 const Settings = z.object({
   heroImageUrl: ImageUrl,
+  // Mirror the hero photo, so people on its left end up on the right, away from the welcome text.
+  heroImageFlip: z.boolean(),
 });
 type SiteSettings = z.infer<typeof Settings>;
-const defaults: SiteSettings = { heroImageUrl: "" };
+const defaults: SiteSettings = { heroImageUrl: "", heroImageFlip: false };
 
+// Values are stored as text; booleans as "true"/"false". A bad row falls back to its default.
 async function readSettings(): Promise<SiteSettings> {
   const rows = await db.select().from(siteSettingsTable);
-  const stored = Object.fromEntries(rows.map((r) => [r.name, r.value]));
-  return { ...defaults, ...Settings.partial().catch({}).parse(stored) };
+  const settings = { ...defaults } as Record<string, unknown>;
+  for (const { name, value } of rows) {
+    const schema = Settings.shape[name as keyof SiteSettings];
+    if (!schema) continue;
+    const parsed = schema.safeParse(typeof defaults[name as keyof SiteSettings] === "boolean" ? value === "true" : value);
+    if (parsed.success) settings[name] = parsed.data;
+  }
+  return settings as SiteSettings;
 }
 
 // Public: the site reads these for guests too.

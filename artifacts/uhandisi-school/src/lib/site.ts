@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/auth';
 
 /** Settings an admin controls from Admin → Site settings. */
-export type SiteSettings = { heroImageUrl: string };
+export type SiteSettings = { heroImageUrl: string; heroImageFlip: boolean };
 export const SITE_SETTINGS_KEY = ['site-settings'];
 
 export const useSiteSettings = () =>
