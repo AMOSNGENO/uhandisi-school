@@ -1,3 +1,6 @@
+import { existsSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import express, { type Express } from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
@@ -37,5 +40,20 @@ app.use(cookieParser());
 app.use(loadUser);
 
 app.use("/api", router);
+
+// On a single-server host (cPanel) the built website sits in public/ next to dist/, and this server hands it out.
+// Locally that folder doesn't exist and Vite serves the site instead.
+const webDir = process.env.WEB_DIR || path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../public");
+if (existsSync(path.join(webDir, "index.html"))) {
+  // File names under assets/ contain a content hash, so they can be cached for good.
+  app.use("/assets", express.static(path.join(webDir, "assets"), { immutable: true, maxAge: "1y", fallthrough: false }));
+  app.use(express.static(webDir, { index: false, maxAge: "1h" }));
+  // Every other page address is handled by the website's own router.
+  app.get(/^(?!\/api(\/|$)).*/, (_req, res) => {
+    res.setHeader("Cache-Control", "no-cache");
+    res.sendFile(path.join(webDir, "index.html"));
+  });
+  logger.info({ webDir }, "Serving the website");
+}
 
 export default app;

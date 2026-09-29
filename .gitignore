@@ -53,3 +53,6 @@ Thumbs.db
 
 # Files uploaded through the admin (course images, lesson media)
 artifacts/api-server/uploads/
+
+# cPanel packages (deploy/cpanel/build.mjs); the data export holds private user details
+deploy/out/
