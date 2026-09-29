@@ -1,8 +1,8 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'wouter';
 import {
-  ArrowLeft, ArrowRight, BookOpen, ChevronLeft, ClipboardCheck, ChevronRight, Clock3, Download, ExternalLink, FileText, Link2, List, LockKeyhole, Maximize2, Minimize2, Paperclip,
+  ArrowLeft, ArrowRight, Award, BookOpen, Check, ChevronLeft, ClipboardCheck, ChevronRight, Clock3, Download, ExternalLink, FileText, Link2, List, LockKeyhole, Maximize2, Minimize2, Paperclip,
 } from 'lucide-react';
 import { api, ApiError, useCurrentUser } from '@/lib/auth';
 import RichContent from '@/components/rich-content';
@@ -14,7 +14,7 @@ const Opening = ({ title }: { title: string }) => <div className="grid h-[60vh] 
 
 type Kind = 'page' | 'file' | 'url' | 'package' | 'quiz';
 type Lesson = {
-  id: number; title: string; kind: Kind; contentHtml: string; externalUrl: string | null;
+  id: number; title: string; kind: Kind; done: boolean; contentHtml: string; externalUrl: string | null;
   file: { name: string | null; type: string | null; size: number | null; url: string } | null;
   package: { scorm: boolean; entryUrl: string; toc: Array<{ title: string; depth: number; url: string | null }> } | null;
 };
@@ -23,7 +23,9 @@ type ModuleView = {
   module: { id: number; title: string; description: string; duration: string; lessonCount: number };
   modules: Array<{ id: number; title: string; unlocked: boolean }>;
   lessons: Lesson[];
+  completion: Completion;
 };
+type Completion = { done: number; total: number; percent: number; complete: boolean };
 
 const kindIcon: Record<Kind, typeof FileText> = { page: FileText, file: Paperclip, url: Link2, package: BookOpen, quiz: ClipboardCheck };
 const sizeLabel = (b?: number | null) => (!b ? '' : b < 1048576 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / 1048576).toFixed(1)} MB`);
@@ -36,8 +38,29 @@ export default function ModulePage() {
     queryFn: () => api<ModuleView>(`/courses/${id}/modules/${moduleId}`),
     retry: false,
   });
+  const client = useQueryClient();
   const [active, setActive] = useState(0);
+  const [doneNow, setDoneNow] = useState<Set<number>>(new Set());
+  const [completion, setCompletion] = useState<Completion | null>(null);
+  const [earned, setEarned] = useState<string | null>(null);
+  const sent = useRef(new Set<number>());
   useEffect(() => { setActive(0); }, [moduleId]);
+  // Fresh module data (e.g. after an exam) replaces the progress last reported by a lesson.
+  useEffect(() => { setCompletion(null); }, [view.data]);
+  // Opening a reading activity marks it done (exams are done once passed).
+  const current = view.data?.lessons[Math.min(active, (view.data?.lessons.length ?? 1) - 1)];
+  useEffect(() => {
+    if (!current || current.kind === 'quiz' || current.done || sent.current.has(current.id)) return;
+    sent.current.add(current.id);
+    api<{ done: boolean; completion: Completion; certificate: { code: string; new: boolean } | null }>(`/lessons/${current.id}/view`, { method: 'POST' })
+      .then(r => {
+        if (r.done) setDoneNow(s => new Set(s).add(current.id));
+        setCompletion(r.completion);
+        if (r.certificate?.new) { setEarned(r.certificate.code); client.invalidateQueries({ queryKey: ['certificates'] }); }
+        client.invalidateQueries({ predicate: q => q.queryKey[0] !== 'module' && q.queryKey[0] !== 'auth' && q.queryKey[0] !== 'quiz' });
+      })
+      .catch(() => sent.current.delete(current.id));
+  }, [current, client]);
   useEffect(() => { window.scrollTo({ top: 0, behavior: 'smooth' }); }, [active]);
 
   const back = <Link href={`/courses/${id}`} className="mb-6 inline-flex items-center gap-2 text-xs font-bold text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--primary))]" data-testid="link-back-course"><ArrowLeft size={14} /> {view.data?.course.title ?? 'Back to course'}</Link>;
@@ -54,6 +77,8 @@ export default function ModulePage() {
   }
 
   const { course, module, modules, lessons } = view.data!;
+  const isDone = (l: Lesson) => l.done || doneNow.has(l.id);
+  const progress = completion ?? view.data!.completion;
   const lesson = lessons[Math.min(active, lessons.length - 1)];
   const position = modules.findIndex(m => m.id === module.id);
   const nextModule = modules[position + 1];
@@ -64,8 +89,18 @@ export default function ModulePage() {
       <p className="mb-3 text-[10px] font-bold uppercase tracking-[.2em] text-[hsl(var(--accent))]">Module {position + 1} of {modules.length}</p>
       <h1 className="font-display text-3xl font-bold leading-tight sm:text-4xl">{module.title}</h1>
       {module.description && <p className="mt-3 max-w-2xl text-sm leading-6 text-white/70">{module.description}</p>}
-      <p className="mt-5 flex flex-wrap items-center gap-4 text-xs text-white/65"><span className="flex items-center gap-1.5"><FileText size={14} /> {lessons.length} {lessons.length === 1 ? 'lesson' : 'lessons'}</span>{module.duration && <span className="flex items-center gap-1.5"><Clock3 size={14} /> {module.duration}</span>}</p>
+      <p className="mt-5 flex flex-wrap items-center gap-4 text-xs text-white/65"><span className="flex items-center gap-1.5"><FileText size={14} /> {lessons.filter(isDone).length} of {lessons.length} done</span>{module.duration && <span className="flex items-center gap-1.5"><Clock3 size={14} /> {module.duration}</span>}</p>
+      {progress.total > 0 && <div className="mt-5 max-w-md" data-testid="course-progress">
+        <div className="mb-1.5 flex justify-between text-xs text-white/70"><span>Course progress</span><span>{progress.done} of {progress.total} activities · {progress.percent}%</span></div>
+        <div className="h-2 overflow-hidden rounded-full bg-white/15"><div className="h-full rounded-full bg-[hsl(var(--accent))] transition-all duration-700" style={{ width: `${progress.percent}%` }} /></div>
+      </div>}
     </header>
+    {earned && <div className="mb-6 flex flex-wrap items-center gap-4 rounded-lg border border-[hsl(38_70%_55%/.5)] bg-[hsl(42_90%_60%/.12)] p-4" data-testid="certificate-earned">
+      <span className="grid size-11 shrink-0 place-items-center rounded-full bg-[hsl(42_90%_55%/.25)] text-[hsl(30_80%_32%)]"><Award size={22} /></span>
+      <div className="min-w-0 flex-1"><p className="font-bold">Course complete: you’ve earned your certificate!</p><p className="text-xs text-[hsl(var(--muted-foreground))]">Certificate code {earned}</p></div>
+      <a href={`/api/certificates/${earned}/pdf`} className="inline-flex items-center gap-2 rounded-md bg-[hsl(var(--primary))] px-4 py-2.5 text-xs font-bold text-[hsl(var(--primary-foreground))]">Download PDF</a>
+      <Link href="/certificates" className="inline-flex rounded-md border border-[hsl(var(--border))] px-4 py-2.5 text-xs font-bold">All certificates</Link>
+    </div>}
 
     {!lesson
       ? <div className="rounded-lg border border-dashed border-[hsl(var(--border))] p-10 text-center" data-testid="state-no-lessons"><BookOpen className="mx-auto mb-3 text-[hsl(var(--accent))]" size={28} /><h2 className="font-display text-lg font-bold">Lessons are on their way</h2><p className="mx-auto mt-1 max-w-sm text-sm text-[hsl(var(--muted-foreground))]">The instructor hasn't published lessons for this module yet. Check back soon.</p></div>
@@ -75,13 +110,13 @@ export default function ModulePage() {
             const Icon = kindIcon[l.kind] ?? FileText;
             return <button key={l.id} onClick={() => setActive(i)} aria-current={i === active ? 'step' : undefined}
               className={`flex w-full items-start gap-3 rounded-md px-3 py-2.5 text-left text-sm transition ${i === active ? 'bg-[hsl(var(--secondary))] font-bold' : 'hover:bg-[hsl(var(--secondary)/.6)]'}`} data-testid={`button-lesson-${l.id}`}>
-              <span className={`mt-0.5 grid size-6 shrink-0 place-items-center rounded-full ${i === active ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]'}`}><Icon size={12} /></span>
-              <span className="min-w-0">{l.title}</span>
+              <span className={`mt-0.5 grid size-6 shrink-0 place-items-center rounded-full ${isDone(l) ? 'bg-[hsl(145_55%_38%)] text-white' : i === active ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]'}`} title={isDone(l) ? 'Done' : undefined}>{isDone(l) ? <Check size={13} strokeWidth={3} /> : <Icon size={12} />}</span>
+              <span className="min-w-0 flex-1">{l.title}</span>
             </button>;
           })}
         </nav>
         <article className="min-w-0 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-6 sm:p-9" data-testid="lesson-content">
-          <p className="text-[10px] font-bold uppercase tracking-[.18em] text-[hsl(var(--link))]">Lesson {active + 1} of {lessons.length}</p>
+          <p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.18em] text-[hsl(var(--link))]">Lesson {active + 1} of {lessons.length}{isDone(lesson) && <span className="inline-flex items-center gap-1 rounded-full bg-[hsl(145_55%_40%/.12)] px-2 py-0.5 normal-case tracking-normal text-[hsl(145_55%_28%)]" data-testid="lesson-done"><Check size={11} strokeWidth={3} /> Done</span>}</p>
           <h2 className="mt-2 font-display text-2xl font-bold sm:text-3xl">{lesson.title}</h2>
           <div className="mt-6 border-t border-[hsl(var(--border))] pt-6"><ActivityBody key={lesson.id} lesson={lesson} /></div>
           <div className="mt-10 flex flex-wrap items-center justify-between gap-3 border-t border-[hsl(var(--border))] pt-5">

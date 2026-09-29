@@ -8,6 +8,7 @@ type Results = {
   students: Array<{
     id: number; name: string; email: string;
     results: Record<string, { best: number; passed: boolean; attempts: number } | null>;
+    progress?: { done: number; total: number; percent: number };
     certificate: { id: number; code: string; issuedBy: string; issuedAt: string } | null;
   }>;
 };
@@ -24,9 +25,7 @@ export default function CourseResults({ courseId }: { courseId: number }) {
 
   return <div className="space-y-4" data-testid="course-results">
     <p className="max-w-2xl text-sm text-[hsl(var(--muted-foreground))]">
-      {r && r.quizzes.length === 0
-        ? 'This course has no exams yet. Add one from the Content tab (“Add an activity or resource” → Exam). You can still issue certificates by hand.'
-        : 'Each learner’s best score per exam. A certificate is issued automatically when a learner passes every exam that counts towards it; you can also issue or revoke one by hand.'}
+      Each learner’s progress and best score per exam. Certificates are issued automatically by the course’s certificate rule (Settings → Certificate); you can also issue or revoke one by hand.
     </p>
     <ErrorNote error={results.error || issue.error || revoke.error} />
     {results.isLoading ? <Loading /> : !r || r.students.length === 0
@@ -35,11 +34,13 @@ export default function CourseResults({ courseId }: { courseId: number }) {
         <table className="w-full text-sm" style={{ minWidth: 480 + r.quizzes.length * 130 }}>
           <thead className="border-b border-[hsl(var(--border))] bg-[hsl(var(--secondary)/.6)]"><tr>
             <th className={th}>Learner</th>
+            <th className={th}>Progress</th>
             {r.quizzes.map(q => <th key={q.id} className={`${th} text-center`} title={q.countsForCertificate ? 'Counts towards the certificate' : 'Practice: does not count'}>{q.title}{q.countsForCertificate && <Award size={11} className="ml-1 inline" />}</th>)}
             <th className={th}>Certificate</th>
           </tr></thead>
           <tbody>{r.students.map(s => <tr key={s.id} className="border-b border-[hsl(var(--border))] last:border-0" data-testid={`result-row-${s.id}`}>
             <td className={td}><p className="font-semibold">{s.name}</p><p className="text-xs text-[hsl(var(--muted-foreground))]">{s.email}</p></td>
+            <td className={td}>{s.progress && s.progress.total > 0 ? <div className="w-28"><p className="mb-1 text-xs"><strong>{s.progress.percent}%</strong> <span className="text-[hsl(var(--muted-foreground))]">({s.progress.done}/{s.progress.total})</span></p><div className="h-1.5 overflow-hidden rounded-full bg-[hsl(var(--muted))]"><div className={`h-full rounded-full ${s.progress.percent === 100 ? 'bg-[hsl(145_55%_38%)]' : 'bg-[hsl(var(--link))]'}`} style={{ width: `${s.progress.percent}%` }} /></div></div> : <span className="text-xs text-[hsl(var(--muted-foreground))]">—</span>}</td>
             {r.quizzes.map(q => {
               const x = s.results[q.id];
               return <td key={q.id} className={`${td} text-center`}>{x

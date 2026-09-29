@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'wouter';
-import { AlignCenter, AlignLeft, AlignRight, Eye, EyeOff, FileText, Plus, Save, Star, Trash2 } from 'lucide-react';
+import { AlignCenter, AlignLeft, AlignRight, Eye, EyeOff, FileText, Plus, QrCode, Save, Star, Trash2 } from 'lucide-react';
 import { api } from '@/lib/auth';
 import { type CertTemplate, type TemplateField, useTemplateBackground } from './certificates';
 import { AdminLayout, Badge, card, ErrorNote, field, ghostBtn, iconBtn, label, Loading, primaryBtn } from './ui';
@@ -21,10 +21,11 @@ const cssFont: Record<TemplateField['font'], React.CSSProperties> = {
   times: { fontFamily: '"Times New Roman", Times, serif' },
   'times-bold': { fontFamily: '"Times New Roman", Times, serif', fontWeight: 700 },
   'times-italic': { fontFamily: '"Times New Roman", Times, serif', fontStyle: 'italic' },
+  'times-bold-italic': { fontFamily: '"Times New Roman", Times, serif', fontWeight: 700, fontStyle: 'italic' },
   courier: { fontFamily: '"Courier New", Courier, monospace' },
 };
 const fontNames: Record<TemplateField['font'], string> = {
-  helvetica: 'Sans', 'helvetica-bold': 'Sans bold', times: 'Serif', 'times-bold': 'Serif bold', 'times-italic': 'Serif italic', courier: 'Typewriter',
+  helvetica: 'Sans', 'helvetica-bold': 'Sans bold', times: 'Serif', 'times-bold': 'Serif bold', 'times-italic': 'Serif italic', 'times-bold-italic': 'Serif bold italic', courier: 'Typewriter',
 };
 
 export default function CertificateEditorPage() {
@@ -103,6 +104,13 @@ export default function CertificateEditorPage() {
     setSaved(false);
   };
 
+  const addQr = () => {
+    const nid = `qr${Date.now().toString(36)}`;
+    setFields(fs => [...fs, { id: nid, label: 'QR code', text: '{verify_url}', x: 0.88, y: 0.2, size: 80, font: 'helvetica', color: '#000000', align: 'center', visible: true, type: 'qr' }]);
+    setSelected(nid);
+    setSaved(false);
+  };
+
   const crumb = <><Link href="/admin/certificates" className="hover:text-[hsl(var(--link))]">Certificates</Link> <span className="mx-1">/</span> {t?.name ?? '…'}</>;
   if (tpl.isLoading) return <AdminLayout title="Certificate design" breadcrumb={crumb}><Loading height={400} /></AdminLayout>;
   if (!t) return <AdminLayout title="Design not found" breadcrumb={crumb}><ErrorNote error={tpl.error ?? new Error('This design was deleted.')} /></AdminLayout>;
@@ -121,6 +129,14 @@ export default function CertificateEditorPage() {
           className="relative w-full touch-none select-none overflow-hidden rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--muted))] shadow-soft" style={{ height: stageH }} data-testid="template-stage">
           {bg ? <img src={bg} alt="Certificate design" draggable={false} className="absolute inset-0 size-full" /> : <p className="grid h-full place-items-center text-sm text-[hsl(var(--muted-foreground))]">Loading your design…</p>}
           {fields.map(f => {
+            if (f.type === 'qr') {
+              const side = f.size * scale;
+              return <div key={f.id} onPointerDown={e => onPointerDown(e, f)} data-testid={`box-${f.id}`} title="QR code: scans to the verify link"
+                className={`absolute grid cursor-move place-items-center bg-white/70 ${selected === f.id ? 'outline outline-2 outline-[hsl(var(--link))]' : 'outline-dashed outline-1 outline-[hsl(var(--link)/.6)]'} ${f.visible ? '' : 'opacity-35'}`}
+                style={{ left: f.x * stageW - side / 2, top: f.y * stageH - side / 2, width: side, height: side, color: f.color }}>
+                <QrCode style={{ width: side * 0.8, height: side * 0.8 }} strokeWidth={1.2} />
+              </div>;
+            }
             const shift = f.align === 'center' ? '-50%' : f.align === 'right' ? '-100%' : '0';
             return <div key={f.id} onPointerDown={e => onPointerDown(e, f)} data-testid={`box-${f.id}`}
               className={`absolute cursor-move whitespace-nowrap px-0.5 leading-none ${selected === f.id ? 'outline outline-2 outline-[hsl(var(--link))]' : 'outline-dashed outline-1 outline-[hsl(var(--link)/.45)] hover:outline-[hsl(var(--link))]'} ${f.visible ? '' : 'opacity-35'}`}
@@ -135,10 +151,10 @@ export default function CertificateEditorPage() {
       <aside className="space-y-4">
         <label className={label}>Design name<input value={name} onChange={e => { setName(e.target.value); setSaved(false); }} className={field} /></label>
         <div className={card}>
-          <div className="flex items-center justify-between border-b border-[hsl(var(--border))] px-3 py-2"><p className="text-sm font-bold">Text boxes</p><button onClick={addBox} className={ghostBtn} data-testid="button-add-box"><Plus size={13} /> Add text box</button></div>
+          <div className="flex items-center justify-between border-b border-[hsl(var(--border))] px-3 py-2"><p className="text-sm font-bold">Text boxes</p><span className="flex gap-1"><button onClick={addBox} className={ghostBtn} data-testid="button-add-box"><Plus size={13} /> Text</button><button onClick={addQr} className={ghostBtn} data-testid="button-add-qr"><QrCode size={13} /> QR code</button></span></div>
           <ul className="max-h-56 overflow-y-auto p-1">
             {fields.map(f => <li key={f.id}><button onClick={() => setSelected(f.id)} className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm ${selected === f.id ? 'bg-[hsl(var(--secondary))] font-bold' : 'hover:bg-[hsl(var(--secondary)/.6)]'}`}>
-              {f.visible ? <Eye size={13} className="shrink-0 text-[hsl(var(--muted-foreground))]" /> : <EyeOff size={13} className="shrink-0 text-[hsl(var(--muted-foreground))]" />}
+              {f.type === 'qr' ? <QrCode size={13} className="shrink-0 text-[hsl(var(--muted-foreground))]" /> : f.visible ? <Eye size={13} className="shrink-0 text-[hsl(var(--muted-foreground))]" /> : <EyeOff size={13} className="shrink-0 text-[hsl(var(--muted-foreground))]" />}
               <span className="min-w-0 flex-1 truncate">{f.label}</span>
             </button></li>)}
           </ul>
@@ -147,8 +163,13 @@ export default function CertificateEditorPage() {
           <div className="flex items-center justify-between"><p className="text-sm font-bold">{sel.label}</p>
             <button onClick={() => { setFields(fs => fs.filter(f => f.id !== sel.id)); setSelected(null); setSaved(false); }} className={`${iconBtn} hover:text-[hsl(var(--destructive))]`} aria-label="Delete this text box"><Trash2 size={14} /></button></div>
           <label className={label}>Label<input value={sel.label} onChange={e => update(sel.id, { label: e.target.value })} className={field} /></label>
-          <label className={label}>Text<input value={sel.text} onChange={e => update(sel.id, { text: e.target.value })} className={field} data-testid="input-box-text" /></label>
+          <label className={label}>{sel.type === 'qr' ? 'Links to' : 'Text'}<input value={sel.text} onChange={e => update(sel.id, { text: e.target.value })} className={field} data-testid="input-box-text" /></label>
+          {sel.type === 'qr' && <p className="text-xs text-[hsl(var(--muted-foreground))]">Usually <code>{'{verify_url}'}</code>: scanning it opens this certificate’s verification page.</p>}
           <div className="flex flex-wrap gap-1">{PLACEHOLDERS.map(p => <button key={p} type="button" onClick={() => update(sel.id, { text: `${sel.text}${sel.text && !sel.text.endsWith(' ') ? ' ' : ''}{${p}}` })} className="rounded bg-[hsl(var(--secondary))] px-1.5 py-0.5 font-mono-ui text-[11px] hover:bg-[hsl(var(--link)/.12)]">{`{${p}}`}</button>)}</div>
+          {sel.type === 'qr' ? <div className="flex items-end gap-3">
+            <label className={label}>Width (points)<input type="number" min={20} max={400} value={sel.size} onChange={e => update(sel.id, { size: Number(e.target.value) || 80 })} className={field} data-testid="input-qr-size" /></label>
+            <label className={label}>Colour<input type="color" value={sel.color} onChange={e => update(sel.id, { color: e.target.value })} className="mt-1.5 block h-10 w-16 rounded-md border border-[hsl(var(--input))] p-1" /></label>
+          </div> : <>
           <div className="grid grid-cols-2 gap-2">
             <label className={label}>Font<select value={sel.font} onChange={e => update(sel.id, { font: e.target.value as TemplateField['font'] })} className={field}>{Object.entries(fontNames).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
             <label className={label}>Size<input type="number" min={4} max={200} step={0.5} value={sel.size} onChange={e => update(sel.id, { size: Number(e.target.value) || 12 })} className={field} data-testid="input-box-size" /></label>
@@ -159,6 +180,7 @@ export default function CertificateEditorPage() {
               {([['left', AlignLeft], ['center', AlignCenter], ['right', AlignRight]] as const).map(([a, Icon]) => <button key={a} type="button" onClick={() => update(sel.id, { align: a })} aria-pressed={sel.align === a} aria-label={`Align ${a}`} className={`grid size-8 place-items-center rounded ${sel.align === a ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : ''}`}><Icon size={15} /></button>)}
             </div>
           </div>
+          </>}
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={sel.visible} onChange={e => update(sel.id, { visible: e.target.checked })} className="size-4 accent-[hsl(var(--primary))]" /> Show on certificates</label>
         </div> : <p className="text-sm text-[hsl(var(--muted-foreground))]">Click a text box on the design to change its wording, font, size or colour.</p>}
       </aside>

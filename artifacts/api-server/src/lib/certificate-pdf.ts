@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { PDFDocument, rgb, StandardFonts, type PDFFont, type PDFPage } from "pdf-lib";
+import QRCode from "qrcode";
 import type { Certificate } from "@workspace/db";
 
 const navy = rgb(11 / 255, 45 / 255, 92 / 255);
@@ -95,14 +96,18 @@ export const FONTS = {
   times: StandardFonts.TimesRoman,
   "times-bold": StandardFonts.TimesRomanBold,
   "times-italic": StandardFonts.TimesRomanItalic,
+  "times-bold-italic": StandardFonts.TimesRomanBoldItalic,
   courier: StandardFonts.Courier,
 } as const;
 export type FontKey = keyof typeof FONTS;
 
-/** A text box on the template. x/y are fractions of the page (y = the text's baseline, from the top). */
+/**
+ * A box on the template. x/y are fractions of the page. Text: y is the baseline (from the top), x per align.
+ * QR code (type "qr"): x/y is its centre, size its width in points, text what it encodes (usually {verify_url}).
+ */
 export type TemplateField = {
   id: string; label: string; text: string; x: number; y: number; size: number; font: FontKey;
-  color: string; align: "left" | "center" | "right"; visible: boolean;
+  color: string; align: "left" | "center" | "right"; visible: boolean; type?: "text" | "qr";
 };
 
 export type CertificateValues = { name: string; course: string; date: string; score: string; code: string; verify_url: string };
@@ -153,6 +158,16 @@ export async function templatePdf(tpl: TemplateSource, values: CertificateValues
   const fonts = new Map<FontKey, PDFFont>();
   for (const f of tpl.fields) {
     if (!f.visible || usesEmptyValue(f.text, values)) continue;
+    if (f.type === "qr") {
+      const content = fillPlaceholders(f.text || "{verify_url}", values);
+      if (!content) continue;
+      // Transparent background so it sits on whatever box the design has.
+      const png = await QRCode.toBuffer(content, { errorCorrectionLevel: "M", margin: 0, width: 600, color: { dark: /^#[0-9a-f]{6}$/i.test(f.color) ? f.color : "#000000", light: "#ffffff00" } });
+      const img = await pdf.embedPng(png);
+      const side = Math.max(20, Math.min(400, f.size));
+      page.drawImage(img, { x: f.x * tpl.pageWidth - side / 2, y: tpl.pageHeight - f.y * tpl.pageHeight - side / 2, width: side, height: side });
+      continue;
+    }
     const text = safe(fillPlaceholders(f.text, values));
     if (!text) continue;
     const key = (f.font in FONTS ? f.font : "helvetica") as FontKey;

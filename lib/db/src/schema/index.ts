@@ -51,6 +51,8 @@ export const coursesTable = mysqlTable("courses", {
   moodleId: int("moodle_id"),
   // Certificate template for this course; null = the default template (or the built-in design).
   certificateTemplateId: int("certificate_template_id"),
+  // completion | exams | manual: when certificates are issued automatically.
+  certificateRule: varchar("certificate_rule", { length: 20 }).notNull().default("completion"),
   createdAt: datetime("created_at").notNull(),
 });
 
@@ -203,3 +205,9 @@ export const certificateTemplatesTable = mysqlTable("certificate_templates", {
 });
 
 export type CertificateTemplate = typeof certificateTemplatesTable.$inferSelect;
+
+export const lessonCompletionsTable = mysqlTable("lesson_completions", {
+  userId: int("user_id").notNull(),
+  lessonId: int("lesson_id").notNull(),
+  completedAt: datetime("completed_at").notNull(),
+});

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { certificatesTable, db, enrollmentsTable, lessonsTable, modulesTable, quizAttemptsTable, usersTable } from "@workspace/db";
 import { requireAdmin, requireAuth } from "../lib/auth";
 import { lessonForViewer } from "../lib/access";
+import { userProgress } from "../lib/progress";
 import { renderCertificate } from "./admin-certificates";
 import {
   attemptResult, certificateExams, ExamError, getQuestions, getSettings, issueCertificate, quizOverview, saveAnswers, saveQuiz,
@@ -147,6 +148,8 @@ router.get("/admin/courses/:id/results", requireAdmin, handle(async (req) => {
   const userIds = [...new Set([...enrolled.map((e) => e.userId), ...attempts.map((a) => a.userId)])];
   const users = userIds.length ? await db.select({ id: usersTable.id, name: usersTable.name, email: usersTable.email }).from(usersTable).where(inArray(usersTable.id, userIds)) : [];
   const certs = await db.select().from(certificatesTable).where(and(eq(certificatesTable.courseId, courseId), isNull(certificatesTable.revokedAt)));
+  const progressBy = new Map<number, { done: number; total: number; percent: number }>();
+  for (const u of users) { const p = await userProgress(u.id, courseId); progressBy.set(u.id, { done: p.done, total: p.total, percent: p.percent }); }
   return {
     quizzes: allQuizIds.map((q) => ({ ...q, countsForCertificate: exams.some((e) => e.id === q.id) })),
     students: users.sort((a, b) => a.name.localeCompare(b.name)).map((u) => {
@@ -156,7 +159,7 @@ router.get("/admin/courses/:id/results", requireAdmin, handle(async (req) => {
         return [qid, { best: Math.max(...mine.map((a) => a.percent ?? 0)), passed: mine.some((a) => a.passed), attempts: mine.length }];
       }));
       const cert = certs.find((c) => c.userId === u.id);
-      return { ...u, results, certificate: cert ? { id: cert.id, code: cert.code, issuedBy: cert.issuedBy, issuedAt: cert.issuedAt.toISOString() } : null };
+      return { ...u, results, progress: progressBy.get(u.id), certificate: cert ? { id: cert.id, code: cert.code, issuedBy: cert.issuedBy, issuedAt: cert.issuedAt.toISOString() } : null };
     }),
   };
 }));

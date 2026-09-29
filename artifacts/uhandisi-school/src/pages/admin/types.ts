@@ -10,7 +10,7 @@ export type AdminModule = {
 export type AdminCourse = {
   id: number; title: string; category: string; description: string; price: number; paymentModel: PaymentModel;
   accent: string; imageUrl: string; instructor: string; instructorRole: string; planName: string; planAmountPerDay: number;
-  planDescription: string; published: boolean; overviewHtml: string; certificateTemplateId?: number | null; enrolledCount?: number; modules: AdminModule[];
+  planDescription: string; published: boolean; overviewHtml: string; certificateTemplateId?: number | null; certificateRule?: 'completion' | 'exams' | 'manual'; enrolledCount?: number; modules: AdminModule[];
 };
 export type CourseFields = Omit<AdminCourse, 'id' | 'modules' | 'enrolledCount'>;
 export type AdminActivity = {

@@ -7,8 +7,10 @@ import { AdminLayout, Badge, card, dangerBtn, ErrorNote, field, FileDrop, ghostB
 
 export type TemplateField = {
   id: string; label: string; text: string; x: number; y: number; size: number;
-  font: 'helvetica' | 'helvetica-bold' | 'times' | 'times-bold' | 'times-italic' | 'courier';
+  font: 'helvetica' | 'helvetica-bold' | 'times' | 'times-bold' | 'times-italic' | 'times-bold-italic' | 'courier';
   color: string; align: 'left' | 'center' | 'right'; visible: boolean;
+  /** qr: x/y is the centre and size the width in points; text is what it encodes. */
+  type?: 'text' | 'qr';
 };
 export type CertTemplate = { id: number; name: string; kind: 'pdf' | 'image'; pageWidth: number; pageHeight: number; fields: TemplateField[]; isDefault: boolean; createdAt: string; courses: number };
 type Issued = { id: number; code: string; studentName: string; courseTitle: string; courseId: number; percent: number | null; issuedBy: string; issuedAt: string; revoked: boolean };

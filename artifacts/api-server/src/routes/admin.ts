@@ -180,6 +180,7 @@ const CourseBody = z.object({
   published: z.boolean().default(true),
   overviewHtml: z.string().max(5_000_000).default(""),
   certificateTemplateId: z.number().int().positive().nullable().default(null),
+  certificateRule: z.enum(["completion", "exams", "manual"]).default("completion"),
 });
 
 const ModuleBody = z.object({

@@ -6,6 +6,8 @@ import {
   certificatesTable, coursesTable, db, lessonsTable, modulesTable, questionOptionsTable, questionsTable,
   quizAttemptsTable, quizSettingsTable, usersTable,
 } from "@workspace/db";
+import { checkCompletion } from "./progress";
+import { enroll } from "./courses";
 
 export type QuizSettings = {
   passMark: number; timeLimitMinutes: number | null; maxAttempts: number | null; shuffle: boolean;
@@ -126,7 +128,9 @@ export async function quizOverview(lessonId: number, userId: number) {
 
 /** Starts (or resumes) an attempt and returns its questions without any answer key. */
 export async function startAttempt(lessonId: number, userId: number) {
-  await quizLesson(lessonId);
+  const lesson = await quizLesson(lessonId);
+  // Taking an exam means taking part in the course (no-op if already enrolled).
+  await enroll(userId, lesson.courseId);
   const settings = await getSettings(lessonId);
   const questions = await getQuestions(lessonId);
   if (questions.length === 0) throw new ExamError(400, "This exam has no questions yet.");
@@ -227,7 +231,7 @@ export async function submitAttempt(attemptId: number, userId: number, answers?:
     submittedAt: new Date(), answers: JSON.stringify(given), scorePoints: Math.round(score * 100) / 100, maxPoints: max,
     percent, passed, review: JSON.stringify(review),
   }).where(and(eq(quizAttemptsTable.id, attemptId), isNull(quizAttemptsTable.submittedAt)));
-  if (done.affectedRows && passed) await awardIfEligible(userId, (await quizLesson(a.lessonId)).courseId);
+  if (done.affectedRows) await checkCompletion(userId, (await quizLesson(a.lessonId)).courseId);
   return attemptResult(attemptId, userId);
 }
 

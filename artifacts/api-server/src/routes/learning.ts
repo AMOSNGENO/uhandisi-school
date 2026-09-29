@@ -7,9 +7,12 @@ import {
   ListCoursesResponse,
   ListStudentPaymentsResponse,
 } from "@workspace/api-zod";
-import { coursesTable, db, enrollmentsTable, lessonsTable } from "@workspace/db";
+import { coursesTable, db, enrollmentsTable, lessonsTable, modulesTable } from "@workspace/db";
 import { requireAuth } from "../lib/auth";
+import { lessonForViewer } from "../lib/access";
 import { enroll, getCourseForUser, listCourseSummaries, paymentsFor } from "../lib/courses";
+import { activeCertificate } from "../lib/exams";
+import { checkCompletion, learningStreak, markViewed, userProgress } from "../lib/progress";
 
 const router: IRouter = Router();
 
@@ -31,8 +34,19 @@ router.get("/courses/:courseId", async (req, res) => {
     res.status(404).json({ error: "Course not found" });
     return;
   }
-  // overviewHtml isn't in the generated API schema yet, so it's added after validation.
-  res.json({ ...GetCourseResponse.parse(course), overviewHtml: course.overviewHtml });
+  const extra: Record<string, unknown> = { overviewHtml: course.overviewHtml, certificateRule: course.certificateRule };
+  if (req.user) {
+    const progress = await userProgress(req.user.id, course.id);
+    for (const m of course.modules) {
+      const p = progress.modules.find((x) => x.moduleId === m.id);
+      if (m.unlocked && p && p.total > 0 && p.done === p.total) m.status = "complete";
+    }
+    const cert = await activeCertificate(req.user.id, course.id);
+    extra.completion = { done: progress.done, total: progress.total, percent: progress.percent, complete: progress.complete };
+    extra.certificate = cert ? { code: cert.code } : null;
+  }
+  // These fields aren't in the generated API schema yet, so they're added after validation.
+  res.json({ ...GetCourseResponse.parse(course), ...extra });
 });
 
 // A module's lessons, only for someone who has unlocked it (admins can preview everything).
@@ -61,12 +75,14 @@ router.get("/courses/:courseId/modules/:moduleId", requireAuth, async (req, res)
     .from(lessonsTable)
     .where(eq(lessonsTable.moduleId, moduleId))
     .orderBy(asc(lessonsTable.order), asc(lessonsTable.id));
+  const progress = await userProgress(req.user!.id, courseId);
   // Files and packages are reached through the access-checked /content routes, never their storage paths.
   const packageUrl = (lessonId: number, href: string) => `/api/content/package/${lessonId}/${href}`;
   const lessons = rows.map((l) => ({
     id: l.id,
     title: l.title,
     kind: l.kind,
+    done: progress.doneIds.has(l.id),
     contentHtml: l.contentHtml,
     externalUrl: l.kind === "url" ? l.externalUrl : null,
     file: l.kind === "file" && l.storageKey
@@ -86,6 +102,26 @@ router.get("/courses/:courseId/modules/:moduleId", requireAuth, async (req, res)
     module: { ...module, locked: !module.unlocked },
     modules: course.modules.map((m) => ({ id: m.id, title: m.title, unlocked: m.unlocked || isAdmin })),
     lessons,
+    completion: { done: progress.done, total: progress.total, percent: progress.percent, complete: progress.complete },
+  });
+});
+
+// Opening a reading activity marks it done; finishing the course can issue the certificate.
+router.post("/lessons/:lessonId/view", requireAuth, async (req, res) => {
+  const lesson = await lessonForViewer(req.user!, Number(req.params.lessonId));
+  if (!lesson) return void res.status(404).json({ error: "Lesson not found, or its module is locked." });
+  const [mod] = await db.select({ courseId: modulesTable.courseId }).from(modulesTable).where(eq(modulesTable.id, lesson.moduleId)).limit(1);
+  const courseId = mod!.courseId;
+  const before = await activeCertificate(req.user!.id, courseId);
+  // Working through a course means taking part in it (no-op if already enrolled).
+  await enroll(req.user!.id, courseId);
+  if (lesson.kind !== "quiz") await markViewed(req.user!.id, lesson.id);
+  const cert = (await checkCompletion(req.user!.id, courseId)) ?? before;
+  const progress = await userProgress(req.user!.id, courseId);
+  res.json({
+    done: progress.doneIds.has(lesson.id),
+    completion: { done: progress.done, total: progress.total, percent: progress.percent, complete: progress.complete },
+    certificate: cert ? { code: cert.code, new: !before } : null,
   });
 });
 
@@ -121,23 +157,31 @@ router.get("/student/dashboard", requireAuth, async (req, res) => {
       .map((e) => e.courseId),
   );
   const enrolledCourses = [];
+  const completion = new Map<number, { done: number; total: number; percent: number; complete: boolean }>();
   for (const { course, summary } of all) {
     if (!myCourseIds.has(course.id)) continue;
     const detail = await getCourseForUser(course.id, user.id);
-    if (detail) enrolledCourses.push({ ...summary, progress: detail.progress });
+    if (!detail) continue;
+    enrolledCourses.push({ ...summary, progress: detail.progress });
+    const p = await userProgress(user.id, course.id);
+    // A course counts as completed once everything is done or its certificate has been earned.
+    const earned = !!(await activeCertificate(user.id, course.id));
+    completion.set(course.id, { done: p.done, total: p.total, percent: p.percent, complete: p.complete || earned });
   }
+  const finished = [...completion.values()].filter((c) => c.complete).length;
   const payments = await paymentsFor({ userId: user.id });
   const data = {
     studentName: user.name,
-    streakDays: 0,
+    streakDays: await learningStreak(user.id),
     enrolledCourses,
     featuredCourses: all.map((c) => c.summary),
     totalPaid: payments.filter((p) => p.status === "completed").reduce((sum, p) => sum + p.amount, 0),
-    activeCourseCount: enrolledCourses.length,
-    // Lesson completion isn't tracked yet, so no course can be "completed" (being fully paid isn't the same thing).
-    completedCourseCount: 0,
+    activeCourseCount: enrolledCourses.length - finished,
+    completedCourseCount: finished,
   };
-  res.json(GetStudentDashboardResponse.parse(data));
+  const parsed = GetStudentDashboardResponse.parse(data);
+  // Learning completion per course isn't in the generated schema yet, so it's added after validation.
+  res.json({ ...parsed, enrolledCourses: parsed.enrolledCourses.map((c) => ({ ...c, completion: completion.get(c.id) })) });
 });
 
 router.get("/student/payments", requireAuth, async (req, res) => {

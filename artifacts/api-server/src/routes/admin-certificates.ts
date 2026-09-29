@@ -121,11 +121,13 @@ const FieldBody = z.object({
   text: z.string().max(300),
   x: z.number().min(0).max(1),
   y: z.number().min(0).max(1),
-  size: z.number().min(4).max(200),
+  // Font size for text; width in points for a QR code.
+  size: z.number().min(4).max(400),
   font: z.enum(Object.keys(FONTS) as [keyof typeof FONTS, ...Array<keyof typeof FONTS>]),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   align: z.enum(["left", "center", "right"]),
   visible: z.boolean(),
+  type: z.enum(["text", "qr"]).optional(),
 });
 
 router.patch("/admin/certificate-templates/:id", async (req, res) => {

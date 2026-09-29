@@ -115,6 +115,7 @@ export async function getCourseForUser(courseId: number, userId: number | null, 
     progress,
     modules: moduleAccess,
     overviewHtml: course.overviewHtml ?? "",
+    certificateRule: course.certificateRule,
   };
 }
 

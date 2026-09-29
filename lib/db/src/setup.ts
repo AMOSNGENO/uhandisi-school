@@ -140,6 +140,16 @@ const tables = [
     is_default BOOLEAN NOT NULL DEFAULT FALSE,
     created_at DATETIME NOT NULL
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+  // Lessons a student has finished (opened, for reading activities). Exams count as done once passed.
+  `CREATE TABLE IF NOT EXISTS lesson_completions (
+    user_id INT NOT NULL,
+    lesson_id INT NOT NULL,
+    completed_at DATETIME NOT NULL,
+    PRIMARY KEY (user_id, lesson_id),
+    INDEX (lesson_id),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (lesson_id) REFERENCES lessons(id) ON DELETE CASCADE
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
   `CREATE TABLE IF NOT EXISTS enrollments (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
@@ -244,6 +254,9 @@ const addedColumns: Array<[table: string, column: string, definition: string]> =
   ["lessons", "moodle_hash", "VARCHAR(40) NULL"],
   // Which certificate template a course uses (NULL = the default template, or the built-in design).
   ["courses", "certificate_template_id", "INT NULL"],
+  // When a certificate is issued automatically: completion (every activity done, exams passed),
+  // exams (the exams that count are passed) or manual (only by an admin).
+  ["courses", "certificate_rule", "VARCHAR(20) NOT NULL DEFAULT 'completion'"],
 ];
 
 async function addMissingColumns(pool: Pool) {

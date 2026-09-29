@@ -11,7 +11,7 @@ import { AdminLayout, Badge, card, dangerBtn, EditorField, ErrorNote, field, gho
 
 const blank: CourseFields = {
   title: '', category: '', description: '', price: 0, paymentModel: 'lipa_pole_pole', accent: '#0B2D5C', imageUrl: '',
-  instructor: '', instructorRole: '', planName: 'Flex', planAmountPerDay: 100, planDescription: '', published: false, overviewHtml: '', certificateTemplateId: null,
+  instructor: '', instructorRole: '', planName: 'Flex', planAmountPerDay: 100, planDescription: '', published: false, overviewHtml: '', certificateTemplateId: null, certificateRule: 'completion',
 };
 
 /** /admin/courses/new, /admin/courses/:id, /admin/courses/:id/content, /admin/courses/:id/participants */
@@ -67,8 +67,8 @@ function SettingsForm({ initial, courseId }: { initial: CourseFields; courseId?:
   };
   const save = useMutation({
     mutationFn: () => {
-      const { title, category, description, price, paymentModel, accent, imageUrl, instructor, instructorRole, planName, planAmountPerDay, planDescription, published, overviewHtml, certificateTemplateId } = form;
-      const body = { title, category, description, price: Number(price), paymentModel, accent, imageUrl, instructor, instructorRole, planName, planAmountPerDay: Number(planAmountPerDay), planDescription, published, overviewHtml, certificateTemplateId: certificateTemplateId ?? null };
+      const { title, category, description, price, paymentModel, accent, imageUrl, instructor, instructorRole, planName, planAmountPerDay, planDescription, published, overviewHtml, certificateTemplateId, certificateRule } = form;
+      const body = { title, category, description, price: Number(price), paymentModel, accent, imageUrl, instructor, instructorRole, planName, planAmountPerDay: Number(planAmountPerDay), planDescription, published, overviewHtml, certificateTemplateId: certificateTemplateId ?? null, certificateRule: certificateRule ?? 'completion' };
       return courseId ? api<AdminCourse>(`/admin/courses/${courseId}`, { method: 'PATCH', body }) : api<AdminCourse>('/admin/courses', { method: 'POST', body });
     },
     onSuccess: c => { refresh(); if (!courseId) navigate(`/admin/courses/${c.id}/content`); },
@@ -115,7 +115,13 @@ function SettingsForm({ initial, courseId }: { initial: CourseFields; courseId?:
         <label className={label}>Plan description<input value={form.planDescription} onChange={set('planDescription')} className={field} /></label>
       </div>}
     </Section>
-    <Section title="Certificate" description="The design used for this course’s certificates. Manage designs under Admin → Certificates.">
+    <Section title="Certificate" description="When students get a certificate, and the design it uses. Manage designs under Admin → Certificates.">
+      <label className={label}>Students get a certificate when they…
+        <select value={form.certificateRule ?? 'completion'} onChange={e => setForm(f => ({ ...f, certificateRule: e.target.value as CourseFields['certificateRule'] }))} className={field} data-testid="select-certificate-rule">
+          <option value="completion">Finish the course: open every lesson and pass the exams</option>
+          <option value="exams">Pass the exams (lessons don’t need to be opened)</option>
+          <option value="manual">Only when an admin issues one (Results tab)</option>
+        </select></label>
       <label className={label}>Certificate design
         <select value={form.certificateTemplateId ?? ''} onChange={e => setForm(f => ({ ...f, certificateTemplateId: e.target.value ? Number(e.target.value) : null }))} className={field} data-testid="select-certificate-design">
           <option value="">Default ({defaultDesign ? defaultDesign.name : 'built-in Uhandisi design'})</option>

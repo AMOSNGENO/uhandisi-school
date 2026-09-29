@@ -45,6 +45,7 @@ export default function QuizActivity({ lessonId, intro }: { lessonId: number; in
     setResult(r);
     client.invalidateQueries({ queryKey: ['quiz', lessonId] });
     client.invalidateQueries({ queryKey: ['certificates'] });
+    client.invalidateQueries({ queryKey: ['module'] });
     window.scrollTo({ top: 0 });
   };
   const openResult = async (id: number) => { try { setResult(await api<Result>(`/attempts/${id}`)); } catch (e) { setError(e instanceof Error ? e.message : 'Could not load that result.'); } };
