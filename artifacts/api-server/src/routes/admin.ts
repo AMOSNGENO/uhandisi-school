@@ -9,7 +9,7 @@ import { removeStored } from "../lib/storage";
 import { clearAccessCache } from "../lib/access";
 import { paymentsFor } from "../lib/courses";
 import { isMpesaConfigured, MpesaError, mpesaStatus, queryStkStatus } from "../lib/mpesa";
-import { isMailConfigured, publicOrigin } from "../lib/mailer";
+import { isMailConfigured, lastMailError, publicOrigin } from "../lib/mailer";
 import { createResetToken, resetUrl, sendResetEmail } from "../lib/password-reset";
 import { applyMpesaResult } from "./payments";
 
@@ -127,7 +127,7 @@ router.post("/admin/users/:id/reset-link", async (req, res) => {
   if (!user.active) return void res.status(400).json({ error: "This account is suspended. Reactivate it first." });
   const url = resetUrl(publicOrigin(req), (await createResetToken(user.id, { force: true }))!);
   const emailed = await sendResetEmail(user, url);
-  res.json({ url, emailed, emailConfigured: isMailConfigured() });
+  res.json({ url, emailed, emailConfigured: isMailConfigured(), emailError: emailed ? undefined : lastMailError() || undefined });
 });
 
 router.delete("/admin/users/:id", async (req, res) => {

@@ -103,7 +103,7 @@ function EditUser({ user, self, onClose }: { user: AdminUser; self: boolean; onC
     mutationFn: () => api(`/admin/users/${user.id}/password`, { method: 'POST', body: { password } }),
     onSuccess: () => { setNotice(`Password changed. ${self ? '' : 'They have been signed out everywhere; '}share the new one with them: ${password}`); setPassword(''); },
   });
-  const resetLink = useMutation({ mutationFn: () => api<{ url: string; emailed: boolean; emailConfigured: boolean }>(`/admin/users/${user.id}/reset-link`, { method: 'POST' }) });
+  const resetLink = useMutation({ mutationFn: () => api<{ url: string; emailed: boolean; emailConfigured: boolean; emailError?: string }>(`/admin/users/${user.id}/reset-link`, { method: 'POST' }) });
   const remove = useMutation({ mutationFn: () => api(`/admin/users/${user.id}`, { method: 'DELETE' }), onSuccess: () => { refresh(); onClose(); } });
   const set = (k: 'name' | 'email' | 'phone' | 'role') => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm(f => ({ ...f, [k]: e.target.value }));
 
@@ -129,7 +129,7 @@ function EditUser({ user, self, onClose }: { user: AdminUser; self: boolean; onC
           <button type="button" disabled={resetLink.isPending} onClick={() => resetLink.mutate()} className={ghostBtn} data-testid="button-reset-link">{resetLink.isPending ? 'Creating…' : 'Create link'}</button>
         </div>
         {resetLink.data && <div className="space-y-2 rounded-md bg-[hsl(var(--secondary))] p-3 text-xs" role="status" data-testid="reset-link">
-          <p>{resetLink.data.emailed ? <>Emailed to <b>{user.email}</b>. You can also send them this link:</> : resetLink.data.emailConfigured ? <>The email couldn’t be sent (see the server log). Send them this link on WhatsApp or SMS:</> : <>Email isn’t set up yet, so send them this link on WhatsApp or SMS:</>}</p>
+          <p>{resetLink.data.emailed ? <>Emailed to <b>{user.email}</b>. You can also send them this link:</> : resetLink.data.emailConfigured ? <>The email couldn’t be sent{resetLink.data.emailError ? <>. The mail server said: <b className="break-all" data-testid="reset-email-error">{resetLink.data.emailError}</b></> : ''}. Send them this link on WhatsApp or SMS meanwhile:</> : <>Email isn’t set up yet, so send them this link on WhatsApp or SMS:</>}</p>
           <div className="flex gap-2"><input readOnly value={resetLink.data.url} onFocus={e => e.target.select()} className={`${field} mt-0 font-mono-ui text-xs`} aria-label="Reset link" /><button type="button" onClick={() => navigator.clipboard?.writeText(resetLink.data!.url)} className={ghostBtn}>Copy</button></div>
         </div>}
         <ErrorNote error={resetLink.error} />

@@ -42,9 +42,15 @@ export async function sendMail(to: string, subject: string, body: { greeting: st
 </div>`;
   try {
     await transporter().sendMail({ from: process.env.MAIL_FROM || process.env.SMTP_USER, to, subject, text, html });
+    lastError = "";
     return true;
   } catch (err) {
     logger.error({ err, to, subject }, "email failed to send");
+    lastError = err instanceof Error ? err.message : String(err);
     return false;
   }
 }
+
+// The mail server's reason for the most recent failure, shown to admins so they needn't dig through logs.
+let lastError = "";
+export const lastMailError = () => lastError;
