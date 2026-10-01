@@ -118,6 +118,11 @@
 .animate-rise-2 { animation: rise .55s .08s cubic-bezier(.2,.8,.2,1) both; }
 .animate-rise-3 { animation: rise .55s .16s cubic-bezier(.2,.8,.2,1) both; }
 .skeleton { animation: pulse-soft 1.5s ease-in-out infinite; }
+/* Reading a lesson on a phone or small tablet: hide the site menus so the lesson has the whole screen. */
+@media (max-width: 1023.98px) {
+  body[data-reading] .app-chrome { display: none; }
+  body[data-reading] .app-main { padding-bottom: 2rem; }
+}
 .font-display { font-family: var(--app-font-serif); }
 .font-mono-ui { font-family: var(--app-font-mono); }
 .shadow-soft { box-shadow: var(--shadow-sm); }

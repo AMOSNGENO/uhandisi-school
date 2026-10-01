@@ -116,7 +116,7 @@ function Shell({ children }: { children: ReactNode }) {
   const loginLink = loginHref(location);
   return (
     <div className="grain min-h-[100dvh] overflow-x-clip bg-[hsl(var(--background))]">
-      <header className="sticky top-0 z-30 border-b border-[hsl(var(--nav-border))] bg-[hsl(var(--nav))] text-[hsl(var(--foreground))] shadow-[0_1px_5px_rgba(0,0,0,0.08)]">
+      <header className="app-chrome sticky top-0 z-30 border-b border-[hsl(var(--nav-border))] bg-[hsl(var(--nav))] text-[hsl(var(--foreground))] shadow-[0_1px_5px_rgba(0,0,0,0.08)]">
         <div className="mx-auto flex h-[68px] max-w-[1320px] items-center gap-6 px-5 sm:px-8 lg:gap-4 lg:px-10 xl:gap-6">
           <Mark />
           <nav className="hidden min-w-0 flex-1 items-center gap-1 overflow-x-auto lg:flex" aria-label="Primary navigation">
@@ -146,9 +146,9 @@ function Shell({ children }: { children: ReactNode }) {
               : <Link href={loginHref(location, 'register')} onClick={() => setMobileOpen(false)} className="flex items-center gap-3 rounded-md px-4 py-3 text-sm font-semibold text-[hsl(var(--primary))]" data-testid="link-mobile-register"><UserRound size={18} />Create free account</Link>}
           </nav>
         </div>}
-        <main className="mx-auto max-w-[1320px] px-5 py-7 pb-28 sm:px-8 sm:py-10 lg:px-10 lg:pb-12">{children}</main>
+        <main className="app-main mx-auto max-w-[1320px] px-5 py-7 pb-28 sm:px-8 sm:py-10 lg:px-10 lg:pb-12">{children}</main>
       </div>
-      <nav className="fixed inset-x-0 bottom-0 z-30 flex h-[68px] items-center justify-around border-t border-[hsl(var(--border))] bg-[hsl(var(--card)/.96)] px-2 backdrop-blur-xl lg:hidden">
+      <nav className="app-chrome fixed inset-x-0 bottom-0 z-30 flex h-[68px] items-center justify-around border-t border-[hsl(var(--border))] bg-[hsl(var(--card)/.96)] px-2 backdrop-blur-xl lg:hidden">
         {allNav.map(({ href, label, icon: Icon }) => <Link key={href} href={href} className={`flex min-w-[56px] flex-col items-center gap-1 py-2 text-[10px] font-bold ${location === href || (href !== '/' && location.startsWith(href)) ? 'text-[hsl(var(--primary))]' : 'text-[hsl(var(--muted-foreground))]'}`} data-testid={`link-bottom-${label.toLowerCase().replaceAll(' ', '-')}`}><Icon size={19} /><span>{label.split(' ')[0]}</span></Link>)}
       </nav>
     </div>

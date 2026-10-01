@@ -31,6 +31,8 @@ type Completion = { done: number; total: number; percent: number; complete: bool
 
 const kindIcon: Record<Kind, typeof FileText> = { page: FileText, file: Paperclip, url: Link2, package: BookOpen, quiz: ClipboardCheck };
 const ksh = (value: number) => `KSh ${value.toLocaleString('en-KE')}`;
+/** Below Tailwind's lg breakpoint the module page shows the lesson list and the lesson one at a time. */
+const isSmallScreen = () => window.matchMedia('(max-width: 1023.98px)').matches;
 const sizeLabel = (b?: number | null) => (!b ? '' : b < 1048576 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / 1048576).toFixed(1)} MB`);
 
 /** A module's activities, one at a time, with the list alongside. */
@@ -47,13 +49,39 @@ export default function ModulePage() {
   const [completion, setCompletion] = useState<Completion | null>(null);
   const [earned, setEarned] = useState<string | null>(null);
   const sent = useRef(new Set<number>());
-  useEffect(() => { setActive(0); }, [moduleId]);
+  // Phones and small tablets: the lesson list first; tapping a lesson shows only that lesson ("reading"),
+  // with the site's menus hidden. The phone's Back button returns to the list.
+  const [reading, setReading] = useState(false);
+  useEffect(() => { setActive(0); setReading(false); }, [moduleId]);
+  useEffect(() => {
+    if (reading) document.body.dataset.reading = '1';
+    else delete document.body.dataset.reading;
+    return () => { delete document.body.dataset.reading; };
+  }, [reading]);
+  useEffect(() => {
+    const onBack = () => setReading(false);
+    window.addEventListener('popstate', onBack);
+    return () => window.removeEventListener('popstate', onBack);
+  }, []);
+  const openLesson = (i: number) => {
+    setActive(i);
+    if (!reading && isSmallScreen()) {
+      window.history.pushState({ uhReading: true }, '');
+      setReading(true);
+    }
+  };
+  const closeLesson = () => {
+    if ((window.history.state as { uhReading?: boolean } | null)?.uhReading) window.history.back();
+    else setReading(false);
+  };
   // Fresh module data (e.g. after an exam) replaces the progress last reported by a lesson.
   useEffect(() => { setCompletion(null); }, [view.data]);
   // Opening a reading activity marks it done (exams are done once passed).
   const current = view.data?.lessons[Math.min(active, (view.data?.lessons.length ?? 1) - 1)];
   useEffect(() => {
     if (!current || current.locked || current.kind === 'quiz' || current.done || sent.current.has(current.id)) return;
+    // On a phone, a lesson counts as opened only once it's tapped, not while the list is showing.
+    if (!reading && isSmallScreen()) return;
     sent.current.add(current.id);
     api<{ done: boolean; completion: Completion; certificate: { code: string; new: boolean } | null }>(`/lessons/${current.id}/view`, { method: 'POST' })
       .then(r => {
@@ -63,7 +91,7 @@ export default function ModulePage() {
         client.invalidateQueries({ predicate: q => q.queryKey[0] !== 'module' && q.queryKey[0] !== 'auth' && q.queryKey[0] !== 'quiz' });
       })
       .catch(() => sent.current.delete(current.id));
-  }, [current, client]);
+  }, [current, client, reading]);
   useEffect(() => { window.scrollTo({ top: 0, behavior: 'smooth' }); }, [active]);
 
   const back = <Link href={`/courses/${id}`} className="mb-6 inline-flex items-center gap-2 text-xs font-bold text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--primary))]" data-testid="link-back-course"><ArrowLeft size={14} /> {view.data?.course.title ?? 'Back to course'}</Link>;
@@ -86,9 +114,16 @@ export default function ModulePage() {
   const position = modules.findIndex(m => m.id === module.id);
   const nextModule = modules[position + 1];
 
+  // While reading on a phone, everything but the lesson is hidden (max-lg:hidden); computers are unaffected.
+  const hideWhileReading = reading ? 'max-lg:hidden' : '';
   return <>
-    {back}
-    <header className="mb-8 rounded-xl bg-[hsl(var(--sidebar))] p-7 text-[hsl(var(--sidebar-foreground))] sm:p-9">
+    {reading && lesson && <div className="sticky top-0 z-20 -mx-5 -mt-7 mb-4 flex items-center gap-3 border-b border-[hsl(var(--border))] bg-[hsl(var(--background)/.95)] px-4 py-2.5 backdrop-blur sm:-mx-8 sm:-mt-10 lg:hidden" data-testid="reading-bar">
+      <button onClick={closeLesson} className="inline-flex shrink-0 items-center gap-1.5 rounded-md py-2 pr-2 text-sm font-bold text-[hsl(var(--primary))]" data-testid="button-back-to-lessons"><ArrowLeft size={17} /> Lessons</button>
+      <span className="min-w-0 flex-1 truncate text-center text-xs font-semibold text-[hsl(var(--muted-foreground))]">{module.title}</span>
+      <span className="shrink-0 rounded-full bg-[hsl(var(--secondary))] px-2.5 py-1 font-mono-ui text-[11px] font-medium">{active + 1}/{lessons.length}</span>
+    </div>}
+    <div className={hideWhileReading}>{back}</div>
+    <header className={`mb-8 rounded-xl bg-[hsl(var(--sidebar))] p-7 text-[hsl(var(--sidebar-foreground))] sm:p-9 ${hideWhileReading}`}>
       <p className="mb-3 text-[10px] font-bold uppercase tracking-[.2em] text-[hsl(var(--accent))]">Module {position + 1} of {modules.length}</p>
       <h1 className="font-display text-3xl font-bold leading-tight sm:text-4xl">{module.title}</h1>
       {module.description && <p className="mt-3 max-w-2xl text-sm leading-6 text-white/70">{module.description}</p>}
@@ -108,17 +143,18 @@ export default function ModulePage() {
     {!lesson
       ? <div className="rounded-lg border border-dashed border-[hsl(var(--border))] p-10 text-center" data-testid="state-no-lessons"><BookOpen className="mx-auto mb-3 text-[hsl(var(--accent))]" size={28} /><h2 className="font-display text-lg font-bold">Lessons are on their way</h2><p className="mx-auto mt-1 max-w-sm text-sm text-[hsl(var(--muted-foreground))]">The instructor hasn't published lessons for this module yet. Check back soon.</p></div>
       : <div className="grid gap-8 lg:grid-cols-[260px_1fr]">
-        <nav aria-label="Lessons in this module" className="h-fit rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-2 lg:sticky lg:top-24">
+        <nav aria-label="Lessons in this module" className={`h-fit rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-2 lg:sticky lg:top-24 ${hideWhileReading}`}>
           {lessons.map((l, i) => {
             const Icon = kindIcon[l.kind] ?? FileText;
-            return <button key={l.id} onClick={() => setActive(i)} aria-current={i === active ? 'step' : undefined}
-              className={`flex w-full items-start gap-3 rounded-md px-3 py-2.5 text-left text-sm transition ${i === active ? 'bg-[hsl(var(--secondary))] font-bold' : 'hover:bg-[hsl(var(--secondary)/.6)]'}`} data-testid={`button-lesson-${l.id}`}>
+            return <button key={l.id} onClick={() => openLesson(i)} aria-current={i === active ? 'step' : undefined}
+              className={`flex w-full items-start gap-3 rounded-md px-3 py-3 text-left text-sm transition lg:py-2.5 ${i === active ? 'lg:bg-[hsl(var(--secondary))] lg:font-bold' : ''} hover:bg-[hsl(var(--secondary)/.6)]`} data-testid={`button-lesson-${l.id}`}>
               <span className={`mt-0.5 grid size-6 shrink-0 place-items-center rounded-full ${l.locked ? 'bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]' : isDone(l) ? 'bg-[hsl(145_55%_38%)] text-white' : i === active ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]'}`} title={l.locked ? 'Locked' : isDone(l) ? 'Done' : undefined}>{l.locked ? <LockKeyhole size={11} /> : isDone(l) ? <Check size={13} strokeWidth={3} /> : <Icon size={12} />}</span>
               <span className={`min-w-0 flex-1 ${l.locked ? 'text-[hsl(var(--muted-foreground))]' : ''}`}>{l.title}{l.locked && <span className="mt-0.5 block font-mono-ui text-[10px] font-normal" data-testid={`lesson-amount-${l.id}`}>{ksh(l.amountToOpen ?? 0)} more opens it</span>}</span>
+              <ChevronRight size={16} className="mt-0.5 shrink-0 text-[hsl(var(--muted-foreground))] lg:hidden" />
             </button>;
           })}
         </nav>
-        <article className="min-w-0 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-6 sm:p-9" data-testid="lesson-content">
+        <article className={`min-w-0 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-6 sm:p-9 ${reading ? 'max-lg:-mx-5 max-lg:rounded-none max-lg:border-x-0 max-lg:px-5 sm:max-lg:-mx-8 sm:max-lg:px-8' : 'max-lg:hidden'}`} data-testid="lesson-content">
           <p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.18em] text-[hsl(var(--link))]">Lesson {active + 1} of {lessons.length}{isDone(lesson) && <span className="inline-flex items-center gap-1 rounded-full bg-[hsl(145_55%_40%/.12)] px-2 py-0.5 normal-case tracking-normal text-[hsl(145_55%_28%)]" data-testid="lesson-done"><Check size={11} strokeWidth={3} /> Done</span>}</p>
           <h2 className="mt-2 font-display text-2xl font-bold sm:text-3xl">{lesson.title}</h2>
           <div className="mt-6 border-t border-[hsl(var(--border))] pt-6">{lesson.locked
