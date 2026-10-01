@@ -106,7 +106,7 @@ MAIL_FROM=Uhandisi School <no-reply@yourdomain.co.ke>
 
 **M-Pesa:**
 1. Fill in the `MPESA_` lines with your production Daraja keys.
-2. Register the callback URL with Safaricom: `https://yourdomain.co.ke/api/mpesa/callback`. The package already sets it, and `MPESA_CALLBACK_SECRET` has already been generated for you.
+2. Nothing needs registering with Safaricom. The app sends the callback address, `https://yourdomain.co.ke/api/mpesa/callback`, with every payment request, together with `MPESA_CALLBACK_SECRET`, which has already been generated for you.
 
 ## Updating the site later
 

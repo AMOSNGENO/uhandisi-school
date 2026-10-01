@@ -52,14 +52,14 @@ NODE_ENV=production
 DATABASE_URL=mysql://CPANELUSER_uhandisi:PASSWORD@localhost:3306/CPANELUSER_uhandisi
 
 # Your site's address, used in certificate QR codes and password reset links.
-PUBLIC_URL=https://YOUR-DOMAIN
+PUBLIC_URL=https://uhandisischool.com
 
-# Email for password reset links (see the setup guide). Leave SMTP_HOST empty to skip.
-SMTP_HOST=
+# Email for password reset links: the cPanel mailbox. Put its password in SMTP_PASS.
+SMTP_HOST=mail.uhandisischool.com
 SMTP_PORT=465
-SMTP_USER=
+SMTP_USER=noreply@uhandisischool.com
 SMTP_PASS=
-MAIL_FROM=Uhandisi School <no-reply@YOUR-DOMAIN>
+MAIL_FROM=Uhandisi School <noreply@uhandisischool.com>
 
 # M-Pesa (Daraja). Leave empty until you have production keys; admins confirm payments by hand meanwhile.
 MPESA_ENV=production
@@ -69,7 +69,7 @@ MPESA_SHORTCODE=
 MPESA_PASSKEY=
 MPESA_TRANSACTION_TYPE=CustomerPayBillOnline
 MPESA_TILL_NUMBER=
-MPESA_CALLBACK_URL=https://YOUR-DOMAIN/api/mpesa/callback
+MPESA_CALLBACK_URL=https://uhandisischool.com/api/mpesa/callback
 MPESA_CALLBACK_SECRET=${randomBytes(24).toString("hex")}
 `);
 
