@@ -7,7 +7,9 @@ import {
 import { requireAdmin, toPublicUser } from "../lib/auth";
 import { removeStored } from "../lib/storage";
 import { clearAccessCache } from "../lib/access";
-import { paymentsFor } from "../lib/courses";
+import { courseLessons, paymentsFor } from "../lib/courses";
+import { priceLessons } from "../lib/pricing";
+import { getSiteSettings } from "./site-settings";
 import { isMpesaConfigured, MpesaError, mpesaStatus, queryStkStatus } from "../lib/mpesa";
 import { isMailConfigured, lastMailError, publicOrigin } from "../lib/mailer";
 import { createResetToken, resetUrl, sendResetEmail } from "../lib/password-reset";
@@ -306,6 +308,58 @@ router.put("/admin/courses/:id/module-order", async (req, res) => {
     }
   });
   res.json(await courseWithModules(id.data));
+});
+
+// ---------------------------------------------------------------------------
+// Pay-as-you-go pricing: each lesson's price and the total paid at which it opens
+// ---------------------------------------------------------------------------
+
+async function coursePricing(courseId: number) {
+  const [course] = await db.select().from(coursesTable).where(eq(coursesTable.id, courseId)).limit(1);
+  if (!course) return null;
+  const modules = await db.select().from(modulesTable).where(eq(modulesTable.courseId, courseId)).orderBy(asc(modulesTable.order), asc(modulesTable.id));
+  const { paymentPlans } = await getSiteSettings();
+  const openStep = Math.min(...paymentPlans.map((p) => p.amountPerDay));
+  const lessons = priceLessons(course.price, await courseLessons(modules), openStep);
+  const total = lessons.reduce((sum, l) => sum + l.price, 0);
+  return {
+    coursePrice: course.price,
+    paymentModel: course.paymentModel,
+    openStep,
+    total,
+    overridesTotal: lessons.filter((l) => !l.auto).reduce((sum, l) => sum + l.price, 0),
+    modules: modules.map((m) => ({ id: m.id, title: m.title })),
+    lessons: lessons.map((l) => ({
+      id: l.id, moduleId: l.moduleId, title: l.title, kind: l.kind, price: l.price, auto: l.auto,
+      priceOverride: l.priceOverride, startsAt: l.startsAt, endsAt: l.endsAt, opensAt: l.opensAt,
+    })),
+  };
+}
+
+router.get("/admin/courses/:id/pricing", async (req, res) => {
+  const id = Id.safeParse(req.params.id);
+  if (!id.success) return void res.status(400).json({ error: "Invalid course id" });
+  const pricing = await coursePricing(id.data);
+  if (!pricing) return void res.status(404).json({ error: "Course not found" });
+  res.json(pricing);
+});
+
+// Sets lesson prices; null puts a lesson back on the automatic share.
+router.put("/admin/courses/:id/pricing", async (req, res) => {
+  const id = Id.safeParse(req.params.id);
+  const body = z.object({
+    prices: z.array(z.object({ lessonId: Id, priceOverride: z.number().int().min(0).max(10_000_000).nullable() })).max(2000),
+  }).safeParse(req.body);
+  if (!id.success) return void res.status(400).json({ error: "Invalid course id" });
+  if (!body.success) return badRequest(res, body.error);
+  const own = new Set((await courseLessons(await db.select().from(modulesTable).where(eq(modulesTable.courseId, id.data)))).map((l) => l.id));
+  const stray = body.data.prices.find((p) => !own.has(p.lessonId));
+  if (stray) return void res.status(400).json({ error: `Lesson ${stray.lessonId} isn't in this course.` });
+  await db.transaction(async (tx) => {
+    for (const p of body.data.prices) await tx.update(lessonsTable).set({ priceOverride: p.priceOverride }).where(eq(lessonsTable.id, p.lessonId));
+  });
+  clearAccessCache();
+  res.json(await coursePricing(id.data));
 });
 
 router.patch("/admin/modules/:id", async (req, res) => {

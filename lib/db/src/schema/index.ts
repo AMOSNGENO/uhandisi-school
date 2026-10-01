@@ -87,6 +87,8 @@ export const lessonsTable = mysqlTable("lessons", {
   // Set when imported from Moodle, e.g. "cm:57" or "chapter:9", with the imported file's content hash.
   moodleRef: varchar("moodle_ref", { length: 40 }),
   moodleHash: varchar("moodle_hash", { length: 40 }),
+  // Pay-as-you-go price set by an admin; null = an even share of what the course price leaves over.
+  priceOverride: int("price_override"),
   order: int("sort_order").notNull().default(1),
   createdAt: datetime("created_at").notNull(),
   updatedAt: datetime("updated_at").notNull(),
@@ -98,6 +100,8 @@ export const enrollmentsTable = mysqlTable("enrollments", {
   courseId: int("course_id").notNull(),
   // Set when an admin enrols someone with the whole course unlocked (scholarship, staff).
   fullAccess: boolean("full_access").notNull().default(false),
+  // The daily plan the student picked (an id from the site's payment plans), if any.
+  planId: varchar("plan_id", { length: 20 }),
   createdAt: datetime("created_at").notNull(),
 });
 

@@ -7,6 +7,7 @@ import type { AdminCourse, CourseFields } from './types';
 import CourseContent from './content';
 import Participants from './participants';
 import CourseResults from './results';
+import CoursePricing from './pricing';
 import { AdminLayout, Badge, card, dangerBtn, EditorField, ErrorNote, field, ghostBtn, hint, ImageUpload, label, Loading, primaryBtn, Tabs } from './ui';
 
 const blank: CourseFields = {
@@ -37,10 +38,12 @@ export default function CourseEditorPage() {
     <Tabs tabs={[
       { href: base, label: 'Settings' },
       { href: `${base}/content`, label: 'Content', count: course.modules.length },
+      ...(course.paymentModel === 'lipa_pole_pole' ? [{ href: `${base}/pricing`, label: 'Pricing' }] : []),
       { href: `${base}/participants`, label: 'Participants', count: course.enrolledCount ?? 0 },
       { href: `${base}/results`, label: 'Results' },
     ]} />
     {tab === 'content' ? <CourseContent course={course} />
+      : tab === 'pricing' ? <CoursePricing courseId={course.id} />
       : tab === 'participants' ? <Participants courseId={course.id} />
       : tab === 'results' ? <CourseResults courseId={course.id} />
         : <SettingsForm key={course.id} initial={course} courseId={course.id} />}
@@ -104,16 +107,16 @@ function SettingsForm({ initial, courseId }: { initial: CourseFields; courseId?:
       <ImageUpload value={form.imageUrl} onChange={imageUrl => setForm(f => ({ ...f, imageUrl }))} />
       <label className={`${label} w-40`}>Fallback colour <span className={hint}>(when there’s no image)</span><input type="color" value={form.accent} onChange={set('accent')} className={`${field} p-1`} /></label>
     </Section>
-    <Section title="Price & payment" description="Free courses open every section. Paid sections unlock as a student’s confirmed payments reach each section’s unlock amount.">
+    <Section title="Price & payment" description="Free: everything open. Paid: one payment opens the whole course. Lipa Pole Pole: every payment opens the next lessons.">
       <div className="grid gap-4 sm:grid-cols-2">
-        <label className={label}>Payment type<select value={form.paymentModel} onChange={set('paymentModel')} className={field} data-testid="select-payment-model"><option value="lipa_pole_pole">Lipa Pole Pole (pay as you go)</option><option value="paid">Paid</option><option value="free">Free</option></select></label>
+        <label className={label}>Payment type<select value={form.paymentModel} onChange={set('paymentModel')} className={field} data-testid="select-payment-model"><option value="lipa_pole_pole">Lipa Pole Pole (pay as you go)</option><option value="paid">Paid (one payment)</option><option value="free">Free</option></select></label>
         <label className={label}>Full price (KSh)<input type="number" min={0} value={free ? 0 : form.price} onChange={set('price')} disabled={free} className={field} data-testid="input-course-price" /></label>
       </div>
-      {!free && <div className="grid gap-4 sm:grid-cols-3">
-        <label className={label}>Plan name<input value={form.planName} onChange={set('planName')} className={field} /></label>
-        <label className={label}>Suggested KSh / day<input type="number" min={0} value={form.planAmountPerDay} onChange={set('planAmountPerDay')} className={field} /></label>
-        <label className={label}>Plan description<input value={form.planDescription} onChange={set('planDescription')} className={field} /></label>
-      </div>}
+      {form.paymentModel === 'lipa_pole_pole' && <p className="rounded-md bg-[hsl(var(--secondary)/.6)] p-3 text-xs leading-5">
+        The price is shared out across the course’s lessons, and each payment opens the lessons it reaches.
+        {courseId ? <> See or change each lesson’s price on the <Link href={`/admin/courses/${courseId}/pricing`} className="font-bold text-[hsl(var(--link))] hover:underline">Pricing</Link> tab.</> : ' You can adjust lesson prices on the Pricing tab once the course has lessons.'}
+        {' '}Students pick a daily plan (e.g. Bronze, Silver, Gold); set those up in <Link href="/admin/settings" className="font-bold text-[hsl(var(--link))] hover:underline">Site settings</Link>.
+      </p>}
     </Section>
     <Section title="Certificate" description="When students get a certificate, and the design it uses. Manage designs under Admin → Certificates.">
       <label className={label}>Students get a certificate when they…

@@ -45,7 +45,12 @@ type CourseSummary = {
 type CourseProgress = {
   coursePrice: number; totalPaid: number; remaining: number; percentagePaid: number;
   unlockedModules: number; totalModules: number; nextModule?: string | null; amountToUnlock?: number | null;
+  unlockedLessons?: number; totalLessons?: number;
+  nextLesson?: { id: number; title: string; moduleId: number; amountToOpen: number } | null;
 };
+/** Pay-as-you-go: every lesson's price and the total paid at which it opens. */
+type LessonPrice = { id: number; moduleId: number; title: string; kind: string; price: number; opensAt: number; unlocked: boolean; paidTowards: number; amountToOpen: number };
+type PaymentPlanOption = { id: string; name: string; amountPerDay: number; daysToFinish: number };
 type Completion = { done: number; total: number; percent: number; complete: boolean };
 type EnrolledCourse = CourseSummary & { progress: CourseProgress; completion?: Completion };
 type StudentDashboard = {
@@ -55,11 +60,13 @@ type StudentDashboard = {
 type Module = {
   id: number; title: string; description: string; order: number; unlockAmount: number;
   unlocked: boolean; lessonCount: number; duration: string; status?: string;
+  amountToOpen?: number; lessonsOpen?: number;
 };
 type CourseDetail = CourseSummary & {
   instructor: string; instructorRole: string; paymentPlan: { name: string; amountPerDay: number; description: string };
   progress: CourseProgress; modules: Module[]; overviewHtml?: string;
   completion?: Completion; certificate?: { code: string } | null; certificateRule?: 'completion' | 'exams' | 'manual';
+  lessons?: LessonPrice[]; plans?: PaymentPlanOption[]; planId?: string | null;
 };
 type Payment = {
   id: number; courseTitle: string; amount: number; status: string; date: string;
@@ -267,7 +274,7 @@ function HomePage() {
 function ContinueCard({ course }: { course: EnrolledCourse }) {
   const p = course.progress;
   const c = course.completion;
-  return <div className="grid overflow-hidden rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-soft md:grid-cols-[220px_1fr]"><CourseArt course={course} className="min-h-[170px] rounded-none" /><div className="flex flex-col justify-between p-5 sm:p-6"><div><div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-bold uppercase tracking-[.15em] text-[hsl(var(--muted-foreground))]">{course.category}</p><h3 className="mt-1 font-display text-xl font-bold">{course.title}</h3></div><span className="rounded-full bg-[hsl(var(--secondary))] px-2.5 py-1 text-[10px] font-bold text-[hsl(var(--primary))]">{c?.complete ? 'Completed' : `${c?.percent ?? 0}% complete`}</span></div><div className="mt-5"><div className="mb-2 flex justify-between text-xs"><span className="text-[hsl(var(--muted-foreground))]">{c ? `${c.done} of ${c.total} activities done` : `${p.unlockedModules} of ${p.totalModules} modules open`}</span>{course.paymentModel !== 'free' && <span className="font-mono-ui text-[hsl(var(--primary))]">{money(p.totalPaid)} paid</span>}</div><ProgressBar value={c?.percent ?? 0} /></div></div><div className="mt-5 flex items-center justify-between border-t border-[hsl(var(--border))] pt-4"><span className="flex items-center gap-2 text-xs text-[hsl(var(--muted-foreground))]"><Play size={13} fill="currentColor" /> {p.nextModule || 'Course complete'}</span><Link href={`/courses/${course.id}`} className="rounded-md bg-[hsl(var(--primary))] px-3 py-2 text-xs font-bold text-[hsl(var(--primary-foreground))]" data-testid={`link-continue-course-${course.id}`}>Open course</Link></div></div></div>;
+  return <div className="grid overflow-hidden rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-soft md:grid-cols-[220px_1fr]"><CourseArt course={course} className="min-h-[170px] rounded-none" /><div className="flex flex-col justify-between p-5 sm:p-6"><div><div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-bold uppercase tracking-[.15em] text-[hsl(var(--muted-foreground))]">{course.category}</p><h3 className="mt-1 font-display text-xl font-bold">{course.title}</h3></div><span className="rounded-full bg-[hsl(var(--secondary))] px-2.5 py-1 text-[10px] font-bold text-[hsl(var(--primary))]">{c?.complete ? 'Completed' : `${c?.percent ?? 0}% complete`}</span></div><div className="mt-5"><div className="mb-2 flex justify-between text-xs"><span className="text-[hsl(var(--muted-foreground))]">{c ? `${c.done} of ${c.total} activities done` : p.totalLessons ? `${p.unlockedLessons} of ${p.totalLessons} lessons open` : `${p.unlockedModules} of ${p.totalModules} modules open`}</span>{course.paymentModel !== 'free' && <span className="font-mono-ui text-[hsl(var(--primary))]">{money(p.totalPaid)} paid</span>}</div><ProgressBar value={c?.percent ?? 0} /></div></div><div className="mt-5 flex items-center justify-between border-t border-[hsl(var(--border))] pt-4"><span className="flex items-center gap-2 text-xs text-[hsl(var(--muted-foreground))]"><Play size={13} fill="currentColor" /> {p.nextModule || 'Course complete'}</span><Link href={`/courses/${course.id}`} className="rounded-md bg-[hsl(var(--primary))] px-3 py-2 text-xs font-bold text-[hsl(var(--primary-foreground))]" data-testid={`link-continue-course-${course.id}`}>Open course</Link></div></div></div>;
 }
 
 function CourseCard({ course }: { course: CourseSummary }) {
@@ -292,14 +299,120 @@ function CoursesPage() {
 function PaymentModal({ course, onClose }: { course: CourseDetail; onClose: () => void }) {
   const mutation = useCreateStkPush();
   const client = useQueryClient();
-  const [amount, setAmount] = useState(String(course.progress.amountToUnlock || course.paymentPlan.amountPerDay));
+  const p = course.progress;
+  const payg = course.paymentModel === 'lipa_pole_pole';
+  const plan = course.plans?.find(x => x.id === course.planId) ?? null;
+  const daily = plan?.amountPerDay ?? course.paymentPlan.amountPerDay;
+  const nextAmount = p.nextLesson?.amountToOpen ?? p.amountToUnlock ?? 0;
+  // Quick amounts: a day or a week at the plan's pace, just enough for the next lesson, or the whole balance.
+  const presets = (payg
+    ? [
+      { label: plan ? `Today · ${plan.name}` : 'One day', amount: daily },
+      { label: 'One week', amount: daily * 7 },
+      { label: 'Next lesson', amount: nextAmount },
+      { label: 'Pay it all', amount: p.remaining },
+    ]
+    : [{ label: 'Full course', amount: p.remaining }])
+    .filter((x, i, all) => x.amount >= 100 && x.amount <= Math.max(p.remaining, 100) && all.findIndex(y => y.amount === x.amount) === i);
+  const [amount, setAmount] = useState(String(presets[0]?.amount ?? Math.max(100, p.remaining)));
   const [phone, setPhone] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const value = Number(amount) || 0;
+  // What this payment opens once M-Pesa confirms it.
+  const opens = (course.lessons ?? []).filter(l => !l.unlocked && l.opensAt <= p.totalPaid + value);
+  const stillLocked = (course.lessons ?? []).find(l => !l.unlocked && l.opensAt > p.totalPaid + value);
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    mutation.mutate({ data: { courseId: course.id, amount: Number(amount), phoneNumber: phone } }, { onSuccess: () => { setSubmitted(true); client.invalidateQueries({ queryKey: getListStudentPaymentsQueryKey() }); client.invalidateQueries({ queryKey: getGetCourseQueryKey(course.id) }); client.invalidateQueries({ queryKey: getGetStudentDashboardQueryKey() }); } });
+    mutation.mutate({ data: { courseId: course.id, amount: value, phoneNumber: phone } }, { onSuccess: () => { setSubmitted(true); client.invalidateQueries({ queryKey: getListStudentPaymentsQueryKey() }); client.invalidateQueries({ queryKey: getGetCourseQueryKey(course.id) }); client.invalidateQueries({ queryKey: getGetStudentDashboardQueryKey() }); } });
   };
-  return <div className="fixed inset-0 z-50 flex items-end justify-center bg-[hsl(var(--foreground)/.4)] p-0 backdrop-blur-sm sm:items-center sm:p-5"><div className="w-full max-w-md rounded-t-xl bg-[hsl(var(--card))] p-6 shadow-lift sm:rounded-xl" role="dialog" aria-modal="true" data-testid="dialog-payment"><div className="mb-6 flex items-center justify-between"><div><p className="text-[10px] font-bold uppercase tracking-[.15em] text-[hsl(var(--primary))]">Lipa Pole Pole</p><h2 className="mt-1 font-display text-2xl font-bold">Keep your access growing</h2></div><button onClick={onClose} className="grid size-9 place-items-center rounded-full bg-[hsl(var(--muted))]" aria-label="Close payment" data-testid="button-close-payment"><X size={17} /></button></div>{submitted ? <div className="py-5 text-center"><div className="mx-auto grid size-14 place-items-center rounded-full bg-[hsl(var(--accent)/.2)] text-[hsl(var(--primary))]"><Clock3 size={26} /></div><h3 className="mt-4 font-display text-xl font-bold">Payment request sent</h3><p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">{(mutation.data as { message?: string } | undefined)?.message || 'Check your phone for the M-Pesa prompt.'} Your next module will unlock only after payment is confirmed.</p><button onClick={onClose} className="mt-6 w-full rounded-md bg-[hsl(var(--primary))] py-3 text-sm font-bold text-[hsl(var(--primary-foreground))]" data-testid="button-done-payment">View payment status</button></div> : <form onSubmit={submit} className="space-y-4"><div className="rounded-lg bg-[hsl(var(--secondary)/.55)] p-4"><div className="flex justify-between text-sm"><span className="text-[hsl(var(--muted-foreground))]">Amount to unlock</span><span className="font-mono-ui font-medium text-[hsl(var(--primary))]">{money(course.progress.amountToUnlock || course.paymentPlan.amountPerDay)}</span></div><p className="mt-2 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{course.paymentPlan.description}</p></div><label className="block text-xs font-bold">Amount<input type="number" min="100" value={amount} onChange={e => setAmount(e.target.value)} className="mt-2 h-11 w-full rounded-md border border-[hsl(var(--border))] bg-transparent px-3 text-sm outline-none focus:border-[hsl(var(--primary))]" data-testid="input-payment-amount" /></label><label className="block text-xs font-bold">M-Pesa number<input required value={phone} onChange={e => setPhone(e.target.value)} placeholder="07xx xxx xxx" className="mt-2 h-11 w-full rounded-md border border-[hsl(var(--border))] bg-transparent px-3 text-sm outline-none focus:border-[hsl(var(--primary))]" data-testid="input-payment-phone" /></label>{mutation.isError && <p className="rounded-md bg-[hsl(var(--destructive)/.08)] p-3 text-xs text-[hsl(var(--destructive))]" data-testid="status-payment-error">We could not send that request. Check the number and try again.</p>}<button disabled={mutation.isPending} className="flex w-full items-center justify-center gap-2 rounded-md bg-[hsl(var(--primary))] py-3.5 text-sm font-bold text-[hsl(var(--primary-foreground))] transition hover:bg-[hsl(var(--primary)/.9)] disabled:opacity-60" data-testid="button-submit-payment">{mutation.isPending ? 'Sending request…' : <>Send M-Pesa request <ArrowRight size={16} /></>}</button><p className="flex items-center justify-center gap-1.5 text-center text-[10px] text-[hsl(var(--muted-foreground))]"><ShieldCheck size={12} /> Securely processed. You only pay for the next step.</p></form>}</div></div>;
+  const input = 'mt-2 h-11 w-full rounded-md border border-[hsl(var(--border))] bg-transparent px-3 text-sm outline-none focus:border-[hsl(var(--primary))]';
+  return <div className="fixed inset-0 z-50 flex items-end justify-center bg-[hsl(var(--foreground)/.4)] p-0 backdrop-blur-sm sm:items-center sm:p-5">
+    <div className="max-h-[94dvh] w-full max-w-md overflow-y-auto rounded-t-xl bg-[hsl(var(--card))] p-6 shadow-lift sm:rounded-xl" role="dialog" aria-modal="true" data-testid="dialog-payment">
+      <div className="mb-5 flex items-center justify-between">
+        <div><p className="text-[10px] font-bold uppercase tracking-[.15em] text-[hsl(var(--primary))]">{payg ? `Lipa Pole Pole${plan ? ` · ${plan.name} plan` : ''}` : 'Pay for the course'}</p><h2 className="mt-1 font-display text-2xl font-bold">{payg ? 'Keep your access growing' : 'Open the whole course'}</h2></div>
+        <button onClick={onClose} className="grid size-9 place-items-center rounded-full bg-[hsl(var(--muted))]" aria-label="Close payment" data-testid="button-close-payment"><X size={17} /></button>
+      </div>
+      {submitted ? <div className="py-5 text-center">
+        <div className="mx-auto grid size-14 place-items-center rounded-full bg-[hsl(var(--accent)/.2)] text-[hsl(var(--primary))]"><Clock3 size={26} /></div>
+        <h3 className="mt-4 font-display text-xl font-bold">Payment request sent</h3>
+        <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">{(mutation.data as { message?: string } | undefined)?.message || 'Check your phone for the M-Pesa prompt.'} {opens.length ? `Once it's confirmed, ${opens.length === 1 ? 'your next lesson opens' : `${opens.length} more lessons open`}.` : 'It counts towards your next lesson as soon as it is confirmed.'}</p>
+        <button onClick={onClose} className="mt-6 w-full rounded-md bg-[hsl(var(--primary))] py-3 text-sm font-bold text-[hsl(var(--primary-foreground))]" data-testid="button-done-payment">View payment status</button>
+      </div> : <form onSubmit={submit} className="space-y-4">
+        <div className="grid grid-cols-2 gap-2" role="group" aria-label="Quick amounts">
+          {presets.map(x => <button type="button" key={x.label} onClick={() => setAmount(String(x.amount))} aria-pressed={value === x.amount}
+            className={`rounded-md border px-3 py-2.5 text-left transition ${value === x.amount ? 'border-[hsl(var(--primary))] bg-[hsl(var(--primary)/.06)]' : 'border-[hsl(var(--border))] hover:border-[hsl(var(--primary)/.4)]'}`} data-testid={`preset-${x.label.toLowerCase().replace(/[^a-z]+/g, '-')}`}>
+            <span className="block text-[11px] font-bold text-[hsl(var(--muted-foreground))]">{x.label}</span><span className="font-mono-ui text-sm font-medium">{money(x.amount)}</span>
+          </button>)}
+        </div>
+        <label className="block text-xs font-bold">Amount (KSh)<input type="number" min={100} max={Math.max(100, p.remaining)} required value={amount} onChange={e => setAmount(e.target.value)} className={input} data-testid="input-payment-amount" /></label>
+        {payg && course.lessons?.length ? <p className="rounded-lg bg-[hsl(var(--secondary)/.55)] p-3 text-xs leading-5" data-testid="payment-preview">
+          {value < 100 ? 'Payments start at KSh 100.'
+            : opens.length ? <>This opens <b>{opens.length === 1 ? `“${opens[0]!.title}”` : `${opens.length} lessons`}</b>{opens.length > 1 ? <>, from “{opens[0]!.title}” to “{opens[opens.length - 1]!.title}”</> : null}.</>
+              : stillLocked ? <>This goes towards “{stillLocked.title}”. {money(stillLocked.opensAt - p.totalPaid - value)} more after this opens it.</>
+                : 'This pays off the course.'}
+        </p> : null}
+        <label className="block text-xs font-bold">M-Pesa number<input required value={phone} onChange={e => setPhone(e.target.value)} placeholder="07xx xxx xxx" className={input} data-testid="input-payment-phone" /></label>
+        {mutation.isError && <p className="rounded-md bg-[hsl(var(--destructive)/.08)] p-3 text-xs text-[hsl(var(--destructive))]" data-testid="status-payment-error">We could not send that request. Check the number and try again.</p>}
+        <button disabled={mutation.isPending || value < 100} className="flex w-full items-center justify-center gap-2 rounded-md bg-[hsl(var(--primary))] py-3.5 text-sm font-bold text-[hsl(var(--primary-foreground))] disabled:opacity-60" data-testid="button-send-stk">{mutation.isPending ? 'Sending request…' : <>Pay {money(value)} with M-Pesa <ArrowRight size={16} /></>}</button>
+        <p className="flex items-center justify-center gap-1.5 text-center text-[10px] text-[hsl(var(--muted-foreground))]"><ShieldCheck size={12} /> Securely processed. Lessons open as soon as M-Pesa confirms.</p>
+      </form>}
+    </div>
+  </div>;
+}
+
+/** Pay-as-you-go side panel: the daily plans, what's paid, and what the next payment opens. */
+function PayPanel({ course, onPay }: { course: CourseDetail; onPay: () => void }) {
+  const user = useCurrentUser().data;
+  const client = useQueryClient();
+  const p = course.progress;
+  const payg = course.paymentModel === 'lipa_pole_pole';
+  const [choosing, setChoosing] = useState<string | null>(null);
+  const [error, setError] = useState('');
+  const choose = async (planId: string) => {
+    if (!user) return;
+    setChoosing(planId);
+    setError('');
+    try {
+      await api(`/courses/${course.id}/plan`, { method: 'POST', body: { planId } });
+      await client.invalidateQueries({ queryKey: getGetCourseQueryKey(course.id) });
+      client.invalidateQueries({ queryKey: getGetStudentDashboardQueryKey() });
+    } catch (e) { setError(e instanceof Error ? e.message : 'Could not save your plan.'); } finally { setChoosing(null); }
+  };
+  const next = p.nextLesson;
+  const cta = 'flex w-full items-center justify-center gap-2 rounded-md bg-[hsl(var(--accent))] py-3.5 text-sm font-bold text-[hsl(var(--accent-foreground))] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50';
+  return <aside className="h-fit rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-5 shadow-soft lg:sticky lg:top-24" data-testid="panel-pay">
+    <div className="flex items-center gap-2 text-[hsl(var(--primary))]"><Zap size={17} fill="currentColor" /><span className="text-xs font-bold uppercase tracking-[.12em]">{payg ? 'Lipa Pole Pole' : 'One payment'}</span></div>
+    <h3 className="mt-4 font-display text-2xl font-bold">{payg ? 'Pay as you grow' : 'Pay once, learn it all'}</h3>
+    <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">{payg ? 'Every payment opens the next lessons. Pick a daily plan, or pay more whenever you like.' : 'One payment opens every lesson in the course.'}</p>
+    {payg && course.plans?.length ? <div className="mt-5" role="radiogroup" aria-label="Daily plan">
+      <p className="mb-2 text-[10px] font-bold uppercase tracking-[.15em] text-[hsl(var(--muted-foreground))]">{user ? 'Your daily plan' : 'Daily plans'}</p>
+      <div className="grid gap-2">
+        {course.plans.map(plan => {
+          const on = course.planId === plan.id;
+          return <button key={plan.id} type="button" role="radio" aria-checked={on} disabled={!user || choosing !== null} onClick={() => choose(plan.id)}
+            className={`flex items-center gap-3 rounded-md border px-3 py-2.5 text-left transition ${on ? 'border-[hsl(var(--primary))] bg-[hsl(var(--primary)/.06)]' : 'border-[hsl(var(--border))] enabled:hover:border-[hsl(var(--primary)/.4)]'} disabled:cursor-default`} data-testid={`plan-${plan.id}`}>
+            <span className={`grid size-5 shrink-0 place-items-center rounded-full border-2 ${on ? 'border-[hsl(var(--primary))] bg-[hsl(var(--primary))] text-white' : 'border-[hsl(var(--border))]'}`}>{on && <Check size={11} strokeWidth={3} />}</span>
+            <span className="min-w-0 flex-1"><span className="block text-sm font-bold">{plan.name}</span><span className="block text-[11px] text-[hsl(var(--muted-foreground))]">{p.remaining > 0 ? `Paid off in about ${plan.daysToFinish} ${plan.daysToFinish === 1 ? 'day' : 'days'}` : 'Fully paid'}</span></span>
+            <span className="font-mono-ui text-sm font-medium">{money(plan.amountPerDay)}<small className="text-[10px] text-[hsl(var(--muted-foreground))]">/day</small></span>
+          </button>;
+        })}
+      </div>
+      {error && <p className="mt-2 text-xs text-[hsl(var(--destructive))]" role="alert">{error}</p>}
+    </div> : null}
+    <div className="my-5 space-y-2 border-y border-[hsl(var(--border))] py-4 text-sm">
+      <div className="flex justify-between"><span className="text-[hsl(var(--muted-foreground))]">Paid so far</span><span className="font-mono-ui font-medium">{money(p.totalPaid)} <small className="text-[hsl(var(--muted-foreground))]">of {money(p.coursePrice)}</small></span></div>
+      {payg && p.totalLessons ? <div className="flex justify-between"><span className="text-[hsl(var(--muted-foreground))]">Lessons open</span><span className="font-mono-ui font-medium" data-testid="lessons-open">{p.unlockedLessons} of {p.totalLessons}</span></div> : null}
+      {next ? <div className="rounded-md bg-[hsl(var(--secondary)/.6)] p-3 text-xs leading-5" data-testid="next-lesson">
+        <span className="flex items-center gap-1.5 font-bold"><LockKeyhole size={12} /> Next: {next.title}</span>
+        <span className="text-[hsl(var(--muted-foreground))]">{money(next.amountToOpen)} more opens it.</span>
+      </div> : p.remaining <= 0 ? <p className="flex items-center gap-1.5 text-xs font-bold text-[hsl(145_55%_28%)]"><Check size={13} /> Fully paid: every lesson is open.</p>
+        : p.amountToUnlock ? <div className="flex justify-between"><span className="text-[hsl(var(--muted-foreground))]">Next unlock</span><span className="font-mono-ui font-medium">{money(p.amountToUnlock)}</span></div> : null}
+    </div>
+    {user
+      ? <button onClick={onPay} disabled={p.remaining <= 0} className={cta} data-testid="button-lipa-pole-pole">{p.remaining > 0 ? 'Make a payment' : 'Course fully paid'} <ArrowRight size={16} /></button>
+      : <Link href={loginHref(`/courses/${course.id}`)} className={cta} data-testid="link-login-to-enroll">Log in to enroll <ArrowRight size={16} /></Link>}
+    <p className="mt-3 text-center text-[10px] text-[hsl(var(--muted-foreground))]">No subscription. No hidden fees. Pay only for what you open.</p>
+  </aside>;
 }
 
 function DetailPage() {
@@ -312,9 +425,7 @@ function DetailPage() {
   if (course.isLoading) return <LoadingState rows={4} />;
   if (course.isError || !data) return <ErrorState onRetry={() => course.refetch()} />;
   const p = data.progress;
-  return <><Link href="/courses" className="mb-6 inline-flex items-center gap-2 text-xs font-bold text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--primary))]" data-testid="link-back-courses"><ChevronRight size={14} className="rotate-180" /> All courses</Link><section className="grid overflow-hidden rounded-xl bg-[hsl(var(--sidebar))] text-[hsl(var(--sidebar-foreground))] lg:grid-cols-[1.1fr_.9fr]"><div className="p-7 sm:p-10"><p className="mb-4 text-[10px] font-bold uppercase tracking-[.2em] text-[hsl(var(--accent))]">{data.category} · {data.lessonCount} lessons</p><h1 className="max-w-2xl font-display text-4xl font-bold leading-[1.08] sm:text-5xl">{data.title}</h1><p className="mt-5 max-w-xl text-sm leading-7 text-white/65">{data.description}</p><div className="mt-7 flex flex-wrap items-center gap-4 text-xs text-white/65"><span className="flex items-center gap-2"><UserRound size={15} /> {data.instructor}</span><span className="h-1 w-1 rounded-full bg-white/30" /><span>{data.instructorRole}</span></div></div><div className="relative min-h-[260px] overflow-hidden p-7 sm:p-10" style={{ background: data.accent || 'hsl(var(--primary))' }}><div className="absolute -right-20 -top-16 size-64 rounded-full border-[38px] border-white/10" /><div className="relative flex h-full flex-col justify-between"><span className="w-fit rounded-full bg-black/15 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[.15em]">Your progress</span><div><div className="mb-2 flex items-end justify-between"><span className="font-mono-ui text-4xl font-medium">{Math.round(p.percentagePaid)}<small className="text-xl">%</small></span><span className="text-xs text-white/70">{money(p.totalPaid)} of {money(p.coursePrice)}</span></div><ProgressBar value={p.percentagePaid} light /><p className="mt-3 text-xs text-white/70">{p.unlockedModules} of {p.totalModules} {p.totalModules === 1 ? 'module' : 'modules'} unlocked</p></div></div></div></section><div className="mt-8 grid gap-8 lg:grid-cols-[1fr_340px]"><section>{user && data.completion && data.completion.total > 0 ? <CourseProgressCard data={data} /> : null}{data.overviewHtml?.trim() ? <div className="mb-10" data-testid="course-overview"><p className="text-[10px] font-bold uppercase tracking-[.2em] text-[hsl(var(--primary))]">About this course</p><RichContent html={data.overviewHtml} className="mt-3" /></div> : null}<div className="mb-4 flex items-end justify-between"><div><p className="text-[10px] font-bold uppercase tracking-[.2em] text-[hsl(var(--primary))]">The curriculum</p><h2 className="mt-1 font-display text-2xl font-bold">Learn in clear steps</h2></div><span className="text-xs text-[hsl(var(--muted-foreground))]">{data.modules.length} {data.modules.length === 1 ? 'module' : 'modules'}</span></div><div className="space-y-3">{data.modules.map((module, i) => <ModuleRow key={module.id} module={module} index={i} courseId={data.id} />)}</div></section>{data.paymentModel === 'free' ? <FreeCoursePanel course={data} /> : <aside className="h-fit rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-5 shadow-soft lg:sticky lg:top-24"><div className="flex items-center gap-2 text-[hsl(var(--primary))]"><Zap size={17} fill="currentColor" /><span className="text-xs font-bold uppercase tracking-[.12em]">Lipa Pole Pole</span></div><h3 className="mt-4 font-display text-2xl font-bold">Pay as you grow</h3><p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">{data.paymentPlan.description}</p><div className="my-5 border-y border-[hsl(var(--border))] py-4"><div className="flex justify-between text-sm"><span className="text-[hsl(var(--muted-foreground))]">Next unlock</span><span className="font-mono-ui font-medium">{p.amountToUnlock ? money(p.amountToUnlock) : 'Complete'}</span></div><div className="mt-2 flex justify-between text-sm"><span className="text-[hsl(var(--muted-foreground))]">Daily plan</span><span className="font-mono-ui font-medium">{money(data.paymentPlan.amountPerDay)}</span></div></div>{user
-      ? <button onClick={() => setPaying(true)} disabled={!p.amountToUnlock} className="flex w-full items-center justify-center gap-2 rounded-md bg-[hsl(var(--accent))] py-3.5 text-sm font-bold text-[hsl(var(--accent-foreground))] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50" data-testid="button-lipa-pole-pole">{p.amountToUnlock ? 'Make a payment' : 'Course fully unlocked'} <ArrowRight size={16} /></button>
-      : <Link href={loginHref(`/courses/${data.id}`)} className="flex w-full items-center justify-center gap-2 rounded-md bg-[hsl(var(--accent))] py-3.5 text-sm font-bold text-[hsl(var(--accent-foreground))] transition hover:-translate-y-0.5" data-testid="link-login-to-enroll">Log in to enroll <ArrowRight size={16} /></Link>}<p className="mt-3 text-center text-[10px] text-[hsl(var(--muted-foreground))]">No subscription. No hidden fees.</p></aside>}</div>{paying && <PaymentModal course={data} onClose={() => setPaying(false)} />}</>;
+  return <><Link href="/courses" className="mb-6 inline-flex items-center gap-2 text-xs font-bold text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--primary))]" data-testid="link-back-courses"><ChevronRight size={14} className="rotate-180" /> All courses</Link><section className="grid overflow-hidden rounded-xl bg-[hsl(var(--sidebar))] text-[hsl(var(--sidebar-foreground))] lg:grid-cols-[1.1fr_.9fr]"><div className="p-7 sm:p-10"><p className="mb-4 text-[10px] font-bold uppercase tracking-[.2em] text-[hsl(var(--accent))]">{data.category} · {data.lessonCount} lessons</p><h1 className="max-w-2xl font-display text-4xl font-bold leading-[1.08] sm:text-5xl">{data.title}</h1><p className="mt-5 max-w-xl text-sm leading-7 text-white/65">{data.description}</p><div className="mt-7 flex flex-wrap items-center gap-4 text-xs text-white/65"><span className="flex items-center gap-2"><UserRound size={15} /> {data.instructor}</span><span className="h-1 w-1 rounded-full bg-white/30" /><span>{data.instructorRole}</span></div></div><div className="relative min-h-[260px] overflow-hidden p-7 sm:p-10" style={{ background: data.accent || 'hsl(var(--primary))' }}><div className="absolute -right-20 -top-16 size-64 rounded-full border-[38px] border-white/10" /><div className="relative flex h-full flex-col justify-between"><span className="w-fit rounded-full bg-black/15 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[.15em]">Your progress</span><div><div className="mb-2 flex items-end justify-between"><span className="font-mono-ui text-4xl font-medium">{Math.round(p.percentagePaid)}<small className="text-xl">%</small></span><span className="text-xs text-white/70">{money(p.totalPaid)} of {money(p.coursePrice)}</span></div><ProgressBar value={p.percentagePaid} light /><p className="mt-3 text-xs text-white/70">{p.totalLessons ? `${p.unlockedLessons} of ${p.totalLessons} ${p.totalLessons === 1 ? 'lesson' : 'lessons'} open` : `${p.unlockedModules} of ${p.totalModules} ${p.totalModules === 1 ? 'module' : 'modules'} unlocked`}</p></div></div></div></section><div className="mt-8 grid gap-8 lg:grid-cols-[1fr_340px]"><section>{user && data.completion && data.completion.total > 0 ? <CourseProgressCard data={data} /> : null}{data.overviewHtml?.trim() ? <div className="mb-10" data-testid="course-overview"><p className="text-[10px] font-bold uppercase tracking-[.2em] text-[hsl(var(--primary))]">About this course</p><RichContent html={data.overviewHtml} className="mt-3" /></div> : null}<div className="mb-4 flex items-end justify-between"><div><p className="text-[10px] font-bold uppercase tracking-[.2em] text-[hsl(var(--primary))]">The curriculum</p><h2 className="mt-1 font-display text-2xl font-bold">Learn in clear steps</h2></div><span className="text-xs text-[hsl(var(--muted-foreground))]">{data.modules.length} {data.modules.length === 1 ? 'module' : 'modules'}</span></div><div className="space-y-3">{data.modules.map((module, i) => <ModuleRow key={module.id} module={module} index={i} courseId={data.id} />)}</div></section>{data.paymentModel === 'free' ? <FreeCoursePanel course={data} /> : <PayPanel course={data} onPay={() => setPaying(true)} />}</div>{paying && <PaymentModal course={data} onClose={() => setPaying(false)} />}</>;
 }
 
 function FreeCoursePanel({ course }: { course: CourseDetail }) {
@@ -372,7 +483,7 @@ function CourseProgressCard({ data }: { data: CourseDetail }) {
 
 function ModuleRow({ module, index, courseId }: { module: Module; index: number; courseId: number }) {
   const open = module.unlocked || module.status === 'complete' || module.status === 'unlocked';
-  const row = <div className={`flex items-center gap-4 rounded-lg border p-4 transition ${open ? 'border-[hsl(var(--border))] bg-[hsl(var(--card))] hover:border-[hsl(var(--primary)/.35)]' : 'border-transparent bg-[hsl(var(--muted)/.55)]'}`} data-testid={`module-row-${module.id}`}><div className={`grid size-10 shrink-0 place-items-center rounded-md text-sm font-bold ${module.status === 'complete' ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : open ? 'bg-[hsl(var(--secondary))] text-[hsl(var(--primary))]' : 'bg-[hsl(var(--border))] text-[hsl(var(--muted-foreground))]'}`}>{module.status === 'complete' ? <Check size={17} /> : open ? String(index + 1).padStart(2, '0') : <LockKeyhole size={16} />}</div><div className="min-w-0 flex-1"><h3 className={`truncate text-sm font-bold ${!open ? 'text-[hsl(var(--muted-foreground))]' : ''}`}>{module.title}</h3><p className="mt-1 truncate text-xs text-[hsl(var(--muted-foreground))]">{module.description}</p></div><div className="hidden items-center gap-1.5 text-[10px] text-[hsl(var(--muted-foreground))] sm:flex"><Clock3 size={13} />{module.duration}</div>{!open && <span className="font-mono-ui text-[10px] text-[hsl(var(--muted-foreground))]">{money(module.unlockAmount)}</span>}{open && <ChevronRight size={16} className="text-[hsl(var(--muted-foreground))]" />}</div>;
+  const row = <div className={`flex items-center gap-4 rounded-lg border p-4 transition ${open ? 'border-[hsl(var(--border))] bg-[hsl(var(--card))] hover:border-[hsl(var(--primary)/.35)]' : 'border-transparent bg-[hsl(var(--muted)/.55)]'}`} data-testid={`module-row-${module.id}`}><div className={`grid size-10 shrink-0 place-items-center rounded-md text-sm font-bold ${module.status === 'complete' ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : open ? 'bg-[hsl(var(--secondary))] text-[hsl(var(--primary))]' : 'bg-[hsl(var(--border))] text-[hsl(var(--muted-foreground))]'}`}>{module.status === 'complete' ? <Check size={17} /> : open ? String(index + 1).padStart(2, '0') : <LockKeyhole size={16} />}</div><div className="min-w-0 flex-1"><h3 className={`truncate text-sm font-bold ${!open ? 'text-[hsl(var(--muted-foreground))]' : ''}`}>{module.title}</h3><p className="mt-1 truncate text-xs text-[hsl(var(--muted-foreground))]">{module.description}</p></div><div className="hidden items-center gap-1.5 text-[10px] text-[hsl(var(--muted-foreground))] sm:flex"><Clock3 size={13} />{module.duration}</div>{!open && <span className="font-mono-ui text-[10px] text-[hsl(var(--muted-foreground))]" data-testid={`module-amount-${module.id}`}>{money(module.amountToOpen ?? module.unlockAmount)} more</span>}{open && module.lessonsOpen !== undefined && module.lessonsOpen < module.lessonCount && <span className="rounded-full bg-[hsl(var(--secondary))] px-2 py-0.5 text-[10px] font-bold text-[hsl(var(--primary))]">{module.lessonsOpen} of {module.lessonCount} open</span>}{open && <ChevronRight size={16} className="text-[hsl(var(--muted-foreground))]" />}</div>;
   return open ? <Link href={`/courses/${courseId}/modules/${module.id}`} className="block" data-testid={`link-module-${module.id}`}>{row}</Link> : row;
 }
 

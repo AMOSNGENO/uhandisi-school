@@ -159,7 +159,7 @@ function SectionCard({ course, module, index, last, onEdit, onMove, moving }: {
       <div className="min-w-0 flex-1">
         <h3 className="truncate font-display text-base font-bold"><span className="mr-2 text-[hsl(var(--muted-foreground))]">{index + 1}.</span>{module.title}</h3>
         <div className="mt-1 flex flex-wrap gap-1.5">
-          {course.paymentModel === 'free' ? <Badge tone="good">Open</Badge> : module.unlockAmount > 0 ? <Badge tone="warn">Unlocks at {money(module.unlockAmount)}</Badge> : <Badge tone="good">Open without payment</Badge>}
+          {course.paymentModel === 'free' ? <Badge tone="good">Open</Badge> : course.paymentModel === 'lipa_pole_pole' ? <Badge tone="info">Priced per lesson</Badge> : module.unlockAmount > 0 ? <Badge tone="warn">Unlocks at {money(module.unlockAmount)}</Badge> : <Badge tone="good">Open without payment</Badge>}
           {module.duration && <Badge>{module.duration}</Badge>}
           <Badge tone="info">{list.length} {list.length === 1 ? 'activity' : 'activities'}</Badge>
         </div>
@@ -237,7 +237,7 @@ function SectionForm({ course, module, onClose }: { course: AdminCourse; module?
       <label className={label}>Section name<input required autoFocus value={form.title} onChange={set('title')} className={field} placeholder="e.g. Week 1: Getting started" data-testid="input-section-title" /></label>
       <label className={label}>Short description <span className={hint}>(optional)</span><input value={form.description} onChange={set('description')} className={field} /></label>
       <div className="grid gap-4 sm:grid-cols-2">
-        {course.paymentModel !== 'free' && <label className={label}>Unlocks at (KSh paid)<input type="number" min={0} value={form.unlockAmount} onChange={set('unlockAmount')} className={field} /><span className={`${hint} mt-1 block`}>0 = open to every enrolled student.</span></label>}
+        {course.paymentModel !== 'free' && <label className={label}>Unlocks at (KSh paid)<input type="number" min={0} value={form.unlockAmount} onChange={set('unlockAmount')} className={field} /><span className={`${hint} mt-1 block`}>{course.paymentModel === 'lipa_pole_pole' ? 'Only used while this section has no lessons. After that, lesson prices (Pricing tab) decide when it opens.' : '0 = open to every enrolled student.'}</span></label>}
         <label className={label}>Duration <span className={hint}>(optional)</span><input value={form.duration} onChange={set('duration')} placeholder="e.g. 2h 30m" className={field} /></label>
       </div>
       <ErrorNote error={save.error} />

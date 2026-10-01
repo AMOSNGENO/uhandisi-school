@@ -261,6 +261,9 @@ const addedColumns: Array<[table: string, column: string, definition: string]> =
   ["lessons", "package_toc", "MEDIUMTEXT NULL"],
   // Manual enrolment by an admin can grant the whole course without payment.
   ["enrollments", "full_access", "BOOLEAN NOT NULL DEFAULT FALSE"],
+  // Pay-as-you-go: a lesson's own price (NULL = its share of the course price), and the student's daily plan.
+  ["lessons", "price_override", "INT NULL"],
+  ["enrollments", "plan_id", "VARCHAR(20) NULL"],
   // Where an item came from when imported from Moodle, so a re-import updates instead of duplicating.
   ["courses", "moodle_id", "INT NULL"],
   ["modules", "moodle_ref", "VARCHAR(40) NULL"],

@@ -15,6 +15,8 @@ const Opening = ({ title }: { title: string }) => <div className="grid h-[60vh] 
 type Kind = 'page' | 'file' | 'url' | 'package' | 'quiz';
 type Lesson = {
   id: number; title: string; kind: Kind; done: boolean; contentHtml: string; externalUrl: string | null;
+  /** Pay-as-you-go: a locked lesson comes without its content until payments reach it. */
+  locked?: boolean; price?: number; paidTowards?: number; amountToOpen?: number;
   file: { name: string | null; type: string | null; size: number | null; url: string } | null;
   package: { scorm: boolean; entryUrl: string; toc: Array<{ title: string; depth: number; url: string | null }> } | null;
 };
@@ -28,6 +30,7 @@ type ModuleView = {
 type Completion = { done: number; total: number; percent: number; complete: boolean };
 
 const kindIcon: Record<Kind, typeof FileText> = { page: FileText, file: Paperclip, url: Link2, package: BookOpen, quiz: ClipboardCheck };
+const ksh = (value: number) => `KSh ${value.toLocaleString('en-KE')}`;
 const sizeLabel = (b?: number | null) => (!b ? '' : b < 1048576 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / 1048576).toFixed(1)} MB`);
 
 /** A module's activities, one at a time, with the list alongside. */
@@ -50,7 +53,7 @@ export default function ModulePage() {
   // Opening a reading activity marks it done (exams are done once passed).
   const current = view.data?.lessons[Math.min(active, (view.data?.lessons.length ?? 1) - 1)];
   useEffect(() => {
-    if (!current || current.kind === 'quiz' || current.done || sent.current.has(current.id)) return;
+    if (!current || current.locked || current.kind === 'quiz' || current.done || sent.current.has(current.id)) return;
     sent.current.add(current.id);
     api<{ done: boolean; completion: Completion; certificate: { code: string; new: boolean } | null }>(`/lessons/${current.id}/view`, { method: 'POST' })
       .then(r => {
@@ -110,15 +113,22 @@ export default function ModulePage() {
             const Icon = kindIcon[l.kind] ?? FileText;
             return <button key={l.id} onClick={() => setActive(i)} aria-current={i === active ? 'step' : undefined}
               className={`flex w-full items-start gap-3 rounded-md px-3 py-2.5 text-left text-sm transition ${i === active ? 'bg-[hsl(var(--secondary))] font-bold' : 'hover:bg-[hsl(var(--secondary)/.6)]'}`} data-testid={`button-lesson-${l.id}`}>
-              <span className={`mt-0.5 grid size-6 shrink-0 place-items-center rounded-full ${isDone(l) ? 'bg-[hsl(145_55%_38%)] text-white' : i === active ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]'}`} title={isDone(l) ? 'Done' : undefined}>{isDone(l) ? <Check size={13} strokeWidth={3} /> : <Icon size={12} />}</span>
-              <span className="min-w-0 flex-1">{l.title}</span>
+              <span className={`mt-0.5 grid size-6 shrink-0 place-items-center rounded-full ${l.locked ? 'bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]' : isDone(l) ? 'bg-[hsl(145_55%_38%)] text-white' : i === active ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]'}`} title={l.locked ? 'Locked' : isDone(l) ? 'Done' : undefined}>{l.locked ? <LockKeyhole size={11} /> : isDone(l) ? <Check size={13} strokeWidth={3} /> : <Icon size={12} />}</span>
+              <span className={`min-w-0 flex-1 ${l.locked ? 'text-[hsl(var(--muted-foreground))]' : ''}`}>{l.title}{l.locked && <span className="mt-0.5 block font-mono-ui text-[10px] font-normal" data-testid={`lesson-amount-${l.id}`}>{ksh(l.amountToOpen ?? 0)} more opens it</span>}</span>
             </button>;
           })}
         </nav>
         <article className="min-w-0 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-6 sm:p-9" data-testid="lesson-content">
           <p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.18em] text-[hsl(var(--link))]">Lesson {active + 1} of {lessons.length}{isDone(lesson) && <span className="inline-flex items-center gap-1 rounded-full bg-[hsl(145_55%_40%/.12)] px-2 py-0.5 normal-case tracking-normal text-[hsl(145_55%_28%)]" data-testid="lesson-done"><Check size={11} strokeWidth={3} /> Done</span>}</p>
           <h2 className="mt-2 font-display text-2xl font-bold sm:text-3xl">{lesson.title}</h2>
-          <div className="mt-6 border-t border-[hsl(var(--border))] pt-6"><ActivityBody key={lesson.id} lesson={lesson} /></div>
+          <div className="mt-6 border-t border-[hsl(var(--border))] pt-6">{lesson.locked
+            ? <div className="rounded-lg bg-[hsl(var(--secondary)/.6)] p-8 text-center" data-testid="lesson-locked">
+              <LockKeyhole className="mx-auto mb-3 text-[hsl(var(--muted-foreground))]" size={26} />
+              <h3 className="font-display text-xl font-bold">This lesson opens with your next payment</h3>
+              <p className="mx-auto mt-2 max-w-sm text-sm text-[hsl(var(--muted-foreground))]">Pay {ksh(lesson.amountToOpen ?? 0)} more and it opens straight away. This lesson costs {ksh(lesson.price ?? 0)}{lesson.paidTowards ? <>; you’ve already covered {ksh(lesson.paidTowards)} of it</> : null}.</p>
+              <Link href={`/courses/${course.id}`} className="mt-5 inline-flex items-center gap-2 rounded-md bg-[hsl(var(--primary))] px-4 py-2.5 text-xs font-bold text-[hsl(var(--primary-foreground))]" data-testid="link-pay-to-open">Make a payment <ArrowRight size={14} /></Link>
+            </div>
+            : <ActivityBody key={lesson.id} lesson={lesson} />}</div>
           <div className="mt-10 flex flex-wrap items-center justify-between gap-3 border-t border-[hsl(var(--border))] pt-5">
             <button disabled={active === 0} onClick={() => setActive(active - 1)} className="inline-flex items-center gap-2 rounded-md border border-[hsl(var(--border))] px-4 py-2.5 text-xs font-bold disabled:invisible" data-testid="button-prev-lesson"><ArrowLeft size={14} /> Previous</button>
             {active < lessons.length - 1

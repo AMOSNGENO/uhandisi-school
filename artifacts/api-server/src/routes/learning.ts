@@ -45,8 +45,27 @@ router.get("/courses/:courseId", async (req, res) => {
     extra.completion = { done: progress.done, total: progress.total, percent: progress.percent, complete: progress.complete };
     extra.certificate = cert ? { code: cert.code } : null;
   }
-  // These fields aren't in the generated API schema yet, so they're added after validation.
-  res.json({ ...GetCourseResponse.parse(course), ...extra });
+  // Pay-as-you-go details (lessons and their prices, plans, lesson-level progress) aren't in the generated API
+  // schema yet, so the validated response gets them back afterwards.
+  res.json({
+    ...GetCourseResponse.parse(course),
+    progress: course.progress, modules: course.modules, lessons: course.lessons, plans: course.plans, planId: course.planId,
+    ...extra,
+  });
+});
+
+// The student picks a daily plan (Bronze, Silver, ...). It only sets their pace; it joins them to the course too.
+router.post("/courses/:courseId/plan", requireAuth, async (req, res) => {
+  const courseId = Number(req.params.courseId);
+  const planId = typeof req.body?.planId === "string" ? req.body.planId : "";
+  const course = Number.isInteger(courseId) ? await getCourseForUser(courseId, req.user!.id) : undefined;
+  if (!course) return void res.status(404).json({ error: "Course not found" });
+  if (course.paymentModel === "free") return void res.status(400).json({ error: "This course is free; there's nothing to pay." });
+  if (!course.plans.some((p) => p.id === planId)) return void res.status(400).json({ error: "Pick one of the plans shown." });
+  await enroll(req.user!.id, courseId);
+  await db.update(enrollmentsTable).set({ planId })
+    .where(and(eq(enrollmentsTable.userId, req.user!.id), eq(enrollmentsTable.courseId, courseId)));
+  res.status(204).end();
 });
 
 // A module's lessons, only for someone who has unlocked it (admins can preview everything).
@@ -78,11 +97,21 @@ router.get("/courses/:courseId/modules/:moduleId", requireAuth, async (req, res)
   const progress = await userProgress(req.user!.id, courseId);
   // Files and packages are reached through the access-checked /content routes, never their storage paths.
   const packageUrl = (lessonId: number, href: string) => `/api/content/package/${lessonId}/${href}`;
-  const lessons = rows.map((l) => ({
+  const locked = (lessonId: number) => !isAdmin && !course.lessons.find((x) => x.id === lessonId)?.unlocked;
+  const lessons = rows.map((l) => {
+    const access = course.lessons.find((x) => x.id === l.id);
+    const pricing = { price: access?.price ?? 0, paidTowards: access?.paidTowards ?? 0, amountToOpen: isAdmin ? 0 : access?.amountToOpen ?? 0 };
+    // A lesson the student hasn't paid up to yet shows its title and price, never its content.
+    if (locked(l.id)) {
+      return { id: l.id, title: l.title, kind: l.kind, done: false, locked: true, ...pricing, contentHtml: "", externalUrl: null, file: null, package: null };
+    }
+    return {
     id: l.id,
     title: l.title,
     kind: l.kind,
     done: progress.doneIds.has(l.id),
+    locked: false,
+    ...pricing,
     contentHtml: l.contentHtml,
     externalUrl: l.kind === "url" ? l.externalUrl : null,
     file: l.kind === "file" && l.storageKey
@@ -96,9 +125,10 @@ router.get("/courses/:courseId/modules/:moduleId", requireAuth, async (req, res)
           .map((t) => ({ title: t.title, depth: t.depth, url: t.href ? packageUrl(l.id, t.href) : null })),
       }
       : null,
-  }));
+    };
+  });
   res.json({
-    course: { id: course.id, title: course.title, accent: course.accent },
+    course: { id: course.id, title: course.title, accent: course.accent, paymentModel: course.paymentModel, remaining: course.progress.remaining },
     module: { ...module, locked: !module.unlocked },
     modules: course.modules.map((m) => ({ id: m.id, title: m.title, unlocked: m.unlocked || isAdmin })),
     lessons,
@@ -158,11 +188,13 @@ router.get("/student/dashboard", requireAuth, async (req, res) => {
   );
   const enrolledCourses = [];
   const completion = new Map<number, { done: number; total: number; percent: number; complete: boolean }>();
+  const fullProgress = new Map<number, unknown>();
   for (const { course, summary } of all) {
     if (!myCourseIds.has(course.id)) continue;
     const detail = await getCourseForUser(course.id, user.id);
     if (!detail) continue;
     enrolledCourses.push({ ...summary, progress: detail.progress });
+    fullProgress.set(course.id, detail.progress);
     const p = await userProgress(user.id, course.id);
     // A course counts as completed once everything is done or its certificate has been earned.
     const earned = !!(await activeCertificate(user.id, course.id));
@@ -181,7 +213,7 @@ router.get("/student/dashboard", requireAuth, async (req, res) => {
   };
   const parsed = GetStudentDashboardResponse.parse(data);
   // Learning completion per course isn't in the generated schema yet, so it's added after validation.
-  res.json({ ...parsed, enrolledCourses: parsed.enrolledCourses.map((c) => ({ ...c, completion: completion.get(c.id) })) });
+  res.json({ ...parsed, enrolledCourses: parsed.enrolledCourses.map((c) => ({ ...c, progress: fullProgress.get(c.id) ?? c.progress, completion: completion.get(c.id) })) });
 });
 
 router.get("/student/payments", requireAuth, async (req, res) => {

@@ -11,7 +11,7 @@ const TTL_MS = 60_000;
 /** Call after changing who is enrolled, so removed access stops at once. */
 export const clearAccessCache = () => cache.clear();
 
-/** The lesson, if this user may open it: admins always, others once its module is unlocked for them. */
+/** The lesson, if this user may open it: admins always, others once their payments have opened it. */
 export async function lessonForViewer(user: PublicUser, lessonId: number): Promise<Lesson | null> {
   const [row] = await db
     .select({ lesson: lessonsTable, courseId: modulesTable.courseId })
@@ -26,7 +26,7 @@ export async function lessonForViewer(user: PublicUser, lessonId: number): Promi
   if ((cache.get(key) ?? 0) > Date.now()) return row.lesson;
 
   const course = await getCourseForUser(row.courseId, user.id);
-  const ok = !!course?.modules.find((m) => m.id === row.lesson.moduleId)?.unlocked;
+  const ok = !!course?.lessons.find((l) => l.id === lessonId)?.unlocked;
   if (!ok) return null;
   if (cache.size > 5000) cache.clear();
   cache.set(key, Date.now() + TTL_MS);
