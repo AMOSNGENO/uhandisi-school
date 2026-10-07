@@ -1,8 +1,8 @@
-import { type FormEvent, type ReactNode, useState } from 'react';
-import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
+import { type FormEvent, type ReactNode, useEffect, useState } from 'react';
+import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, Redirect, Route, Switch, useLocation, useParams } from 'wouter';
 import {
-  ArrowRight, BarChart3, BookOpen, Check, ChevronRight, Clock3,
+  ArrowRight, BarChart3, BookOpen, Check, CheckCircle2, ChevronRight, Clock3, XCircle,
   CreditCard, ExternalLink, Flame, GraduationCap, LayoutDashboard, LockKeyhole,
   Award, LogOut, Menu, Play, ReceiptText, Search, ShieldCheck, Sparkles, UserRound,
   WalletCards, X, Zap,
@@ -321,10 +321,29 @@ function PaymentModal({ course, onClose }: { course: CourseDetail; onClose: () =
   // What this payment opens once M-Pesa confirms it.
   const opens = (course.lessons ?? []).filter(l => !l.unlocked && l.opensAt <= p.totalPaid + value);
   const stillLocked = (course.lessons ?? []).find(l => !l.unlocked && l.opensAt > p.totalPaid + value);
+  const refresh = () => {
+    client.invalidateQueries({ queryKey: getListStudentPaymentsQueryKey() });
+    client.invalidateQueries({ queryKey: getGetCourseQueryKey(course.id) });
+    client.invalidateQueries({ queryKey: getGetStudentDashboardQueryKey() });
+  };
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    mutation.mutate({ data: { courseId: course.id, amount: value, phoneNumber: phone } }, { onSuccess: () => { setSubmitted(true); client.invalidateQueries({ queryKey: getListStudentPaymentsQueryKey() }); client.invalidateQueries({ queryKey: getGetCourseQueryKey(course.id) }); client.invalidateQueries({ queryKey: getGetStudentDashboardQueryKey() }); } });
+    mutation.mutate({ data: { courseId: course.id, amount: value, phoneNumber: phone } }, { onSuccess: () => { setSubmitted(true); setSentAt(Date.now()); refresh(); } });
   };
+  // Wait for M-Pesa's answer: poll until the payment leaves "pending", for up to 3 minutes.
+  const sent = mutation.data as { id?: number; message?: string; checkoutRequestId?: string } | undefined;
+  const viaMpesa = !!sent?.checkoutRequestId && !sent.checkoutRequestId.startsWith('manual_');
+  const [sentAt, setSentAt] = useState(0);
+  const status = useQuery({
+    queryKey: ['payment-status', sent?.id],
+    queryFn: () => api<{ status: string; receipt?: string | null; message?: string }>(`/payments/${sent!.id}/status`),
+    enabled: submitted && viaMpesa && !!sent?.id,
+    refetchInterval: q => (q.state.data && q.state.data.status !== 'pending') || Date.now() - sentAt > 180_000 ? false : 3000,
+  });
+  const outcome = status.data?.status ?? 'pending';
+  useEffect(() => { if (outcome !== 'pending') refresh(); }, [outcome]); // eslint-disable-line react-hooks/exhaustive-deps
+  const timedOut = viaMpesa && outcome === 'pending' && sentAt > 0 && !status.isFetching && Date.now() - sentAt > 180_000;
+  const sendError = (mutation.error as { data?: { error?: string } } | null)?.data?.error;
   const input = 'mt-2 h-11 w-full rounded-md border border-[hsl(var(--border))] bg-transparent px-3 text-sm outline-none focus:border-[hsl(var(--primary))]';
   return <div className="fixed inset-0 z-50 flex items-end justify-center bg-[hsl(var(--foreground)/.4)] p-0 backdrop-blur-sm sm:items-center sm:p-5">
     <div className="max-h-[94dvh] w-full max-w-md overflow-y-auto rounded-t-xl bg-[hsl(var(--card))] p-6 shadow-lift sm:rounded-xl" role="dialog" aria-modal="true" data-testid="dialog-payment">
@@ -332,11 +351,23 @@ function PaymentModal({ course, onClose }: { course: CourseDetail; onClose: () =
         <div><p className="text-[10px] font-bold uppercase tracking-[.15em] text-[hsl(var(--primary))]">{payg ? `Lipa Pole Pole${plan ? ` · ${plan.name} plan` : ''}` : 'Pay for the course'}</p><h2 className="mt-1 font-display text-2xl font-bold">{payg ? 'Keep your access growing' : 'Open the whole course'}</h2></div>
         <button onClick={onClose} className="grid size-9 place-items-center rounded-full bg-[hsl(var(--muted))]" aria-label="Close payment" data-testid="button-close-payment"><X size={17} /></button>
       </div>
-      {submitted ? <div className="py-5 text-center">
-        <div className="mx-auto grid size-14 place-items-center rounded-full bg-[hsl(var(--accent)/.2)] text-[hsl(var(--primary))]"><Clock3 size={26} /></div>
-        <h3 className="mt-4 font-display text-xl font-bold">Payment request sent</h3>
-        <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">{(mutation.data as { message?: string } | undefined)?.message || 'Check your phone for the M-Pesa prompt.'} {opens.length ? `Once it's confirmed, ${opens.length === 1 ? 'your next lesson opens' : `${opens.length} more lessons open`}.` : 'It counts towards your next lesson as soon as it is confirmed.'}</p>
-        <button onClick={onClose} className="mt-6 w-full rounded-md bg-[hsl(var(--primary))] py-3 text-sm font-bold text-[hsl(var(--primary-foreground))]" data-testid="button-done-payment">View payment status</button>
+      {submitted && outcome === 'completed' ? <div className="py-5 text-center" data-testid="status-payment-completed">
+        <CheckCircle2 size={52} className="mx-auto text-[hsl(145_55%_35%)]" />
+        <h3 className="mt-4 font-display text-xl font-bold">Payment received</h3>
+        <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">{money(value)} confirmed by M-Pesa{status.data?.receipt ? ` (receipt ${status.data.receipt})` : ''}. {opens.length ? `${opens.length === 1 ? 'Your next lesson is' : `${opens.length} more lessons are`} now open.` : 'It has been added to your balance.'}</p>
+        <button onClick={onClose} className="mt-6 w-full rounded-md bg-[hsl(var(--primary))] py-3 text-sm font-bold text-[hsl(var(--primary-foreground))]" data-testid="button-done-payment">Continue learning</button>
+      </div> : submitted && (outcome === 'failed' || outcome === 'cancelled') ? <div className="py-5 text-center" data-testid="status-payment-failed">
+        <XCircle size={52} className="mx-auto text-[hsl(var(--destructive))]" />
+        <h3 className="mt-4 font-display text-xl font-bold">{outcome === 'cancelled' ? 'Payment cancelled' : 'Payment not completed'}</h3>
+        <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">{status.data?.message || 'M-Pesa did not complete the payment.'} No money was taken. You can try again.</p>
+        <button onClick={() => { mutation.reset(); setSubmitted(false); }} className="mt-6 w-full rounded-md bg-[hsl(var(--primary))] py-3 text-sm font-bold text-[hsl(var(--primary-foreground))]" data-testid="button-retry-payment">Try again</button>
+      </div> : submitted ? <div className="py-5 text-center">
+        <div className="mx-auto grid size-14 place-items-center rounded-full bg-[hsl(var(--accent)/.2)] text-[hsl(var(--primary))]"><Clock3 size={26} className={viaMpesa && !timedOut ? 'animate-pulse' : ''} /></div>
+        <h3 className="mt-4 font-display text-xl font-bold">{viaMpesa ? (timedOut ? 'Still waiting for M-Pesa' : 'Check your phone') : 'Payment request sent'}</h3>
+        <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">{viaMpesa
+          ? (timedOut ? "We haven't heard back from M-Pesa yet. If you paid, it will show in your payments once confirmed." : 'Enter your M-Pesa PIN on the prompt. This page updates by itself once you pay.')
+          : sent?.message || 'An administrator will confirm it.'} {!timedOut && (opens.length ? `Once it's confirmed, ${opens.length === 1 ? 'your next lesson opens' : `${opens.length} more lessons open`}.` : 'It counts towards your next lesson as soon as it is confirmed.')}</p>
+        <button onClick={onClose} className="mt-6 w-full rounded-md bg-[hsl(var(--primary))] py-3 text-sm font-bold text-[hsl(var(--primary-foreground))]" data-testid="button-done-payment">{viaMpesa && !timedOut ? 'Close, I’ll check later' : 'View payment status'}</button>
       </div> : <form onSubmit={submit} className="space-y-4">
         <div className="grid grid-cols-2 gap-2" role="group" aria-label="Quick amounts">
           {presets.map(x => <button type="button" key={x.label} onClick={() => setAmount(String(x.amount))} aria-pressed={value === x.amount}
@@ -352,7 +383,7 @@ function PaymentModal({ course, onClose }: { course: CourseDetail; onClose: () =
                 : 'This pays off the course.'}
         </p> : null}
         <label className="block text-xs font-bold">M-Pesa number<input required value={phone} onChange={e => setPhone(e.target.value)} placeholder="07xx xxx xxx" className={input} data-testid="input-payment-phone" /></label>
-        {mutation.isError && <p className="rounded-md bg-[hsl(var(--destructive)/.08)] p-3 text-xs text-[hsl(var(--destructive))]" data-testid="status-payment-error">We could not send that request. Check the number and try again.</p>}
+        {mutation.isError && <p className="rounded-md bg-[hsl(var(--destructive)/.08)] p-3 text-xs text-[hsl(var(--destructive))]" data-testid="status-payment-error">{sendError || 'We could not send that request. Check the number and try again.'}</p>}
         <button disabled={mutation.isPending || value < 100} className="flex w-full items-center justify-center gap-2 rounded-md bg-[hsl(var(--primary))] py-3.5 text-sm font-bold text-[hsl(var(--primary-foreground))] disabled:opacity-60" data-testid="button-send-stk">{mutation.isPending ? 'Sending request…' : <>Pay {money(value)} with M-Pesa <ArrowRight size={16} /></>}</button>
         <p className="flex items-center justify-center gap-1.5 text-center text-[10px] text-[hsl(var(--muted-foreground))]"><ShieldCheck size={12} /> Securely processed. Lessons open as soon as M-Pesa confirms.</p>
       </form>}

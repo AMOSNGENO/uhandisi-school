@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Clock3 } from 'lucide-react';
 import { api } from '@/lib/auth';
 import type { AdminPayment } from './types';
+import { type MpesaInfo, MPESA_KEY, MpesaSettings } from './mpesa-settings';
 import { AdminLayout, Badge, card, ErrorNote, ghostBtn, Loading, money, primaryBtn, td, th } from './ui';
 
 const tone: Record<string, 'good' | 'warn' | 'bad' | 'muted'> = { completed: 'good', pending: 'warn', failed: 'bad', cancelled: 'muted', refunded: 'muted' };
@@ -35,7 +36,7 @@ export default function AdminPaymentsPage() {
     mutationFn: ({ id, ...body }: { id: number; status: string; receipt?: string }) => api(`/admin/payments/${id}`, { method: 'PATCH', body }),
     onSuccess: () => client.invalidateQueries({ queryKey: ['admin'] }),
   });
-  const mpesa = useQuery({ queryKey: ['admin', 'mpesa'], queryFn: () => api<{ configured: boolean; environment: string; missing: string[] }>('/admin/mpesa') });
+  const mpesa = useQuery({ queryKey: MPESA_KEY, queryFn: () => api<MpesaInfo>('/admin/mpesa') });
   const check = useMutation({
     mutationFn: (id: number) => api<{ status: string; message: string }>(`/admin/payments/${id}/check`, { method: 'POST' }),
     onSuccess: r => { alert(`M-Pesa says: ${r.message || r.status}`); client.invalidateQueries({ queryKey: ['admin'] }); },
@@ -45,9 +46,8 @@ export default function AdminPaymentsPage() {
     if (receipt !== null) update.mutate({ id: p.id, status: 'completed', receipt });
   };
   return <AdminLayout title="Payments" description="Every M-Pesa payment. Confirm one by hand if Safaricom's confirmation never arrived; confirmed money unlocks modules straight away.">
-    {mpesa.data && (mpesa.data.configured
-      ? <p className="mb-5 flex items-center gap-2 rounded-md bg-[hsl(var(--link)/.08)] p-3 text-xs text-[hsl(var(--link))]" data-testid="status-mpesa"><Check size={14} /> M-Pesa connected ({mpesa.data.environment}). Payments confirm automatically.</p>
-      : <p className="mb-5 rounded-md border border-[hsl(38_90%_50%/.4)] bg-[hsl(38_90%_50%/.08)] p-3 text-xs leading-5" data-testid="status-mpesa"><strong>M-Pesa isn't connected yet.</strong> Payments are recorded as pending for you to confirm here. To connect, fill in <code className="rounded bg-[hsl(var(--muted))] px-1">{mpesa.data.missing.join(', ')}</code> in <code className="rounded bg-[hsl(var(--muted))] px-1">artifacts/api-server/.env</code> and restart the server.</p>)}
+    {mpesa.data && <MpesaSettings info={mpesa.data} />}
+    <ErrorNote error={mpesa.error} />
     <div className="mb-4 flex gap-1 overflow-x-auto">
       {['', 'pending', 'completed', 'failed', 'cancelled', 'refunded'].map(s => <button key={s || 'all'} onClick={() => setStatus(s)} aria-pressed={status === s}
         className={`whitespace-nowrap rounded-md px-3.5 py-2 text-xs font-bold capitalize transition ${status === s ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--secondary))]'}`}>{s || 'All'}</button>)}

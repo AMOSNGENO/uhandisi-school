@@ -105,8 +105,10 @@ MAIL_FROM=Uhandisi School <no-reply@yourdomain.co.ke>
 ```
 
 **M-Pesa:**
-1. Fill in the `MPESA_` lines with your production Daraja keys.
-2. Nothing needs registering with Safaricom. The app sends the callback address, `https://yourdomain.co.ke/api/mpesa/callback`, with every payment request, together with `MPESA_CALLBACK_SECRET`, which has already been generated for you.
+1. Log in as admin and open **Admin → Payments → M-Pesa settings**. Choose **Live**, **Till number** (or Paybill), enter the till and store numbers and the consumer key, consumer secret and passkey from your Daraja Go-Live app, and click **Save**. No restart needed.
+2. Under **Test**, click **Check keys**, then enter your phone number and send a KSh 1 test prompt.
+3. (Instead of the form you can fill in the `MPESA_` lines in `.env` and restart; anything saved in the form takes priority.)
+4. Nothing needs registering with Safaricom. The app sends the callback address, `https://yourdomain.co.ke/api/mpesa/callback`, with every payment request, together with `MPESA_CALLBACK_SECRET`, which has already been generated for you.
 
 ## Updating the site later
 

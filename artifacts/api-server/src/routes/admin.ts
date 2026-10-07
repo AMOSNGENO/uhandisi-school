@@ -10,7 +10,10 @@ import { clearAccessCache } from "../lib/access";
 import { courseLessons, paymentsFor } from "../lib/courses";
 import { priceLessons } from "../lib/pricing";
 import { getSiteSettings } from "./site-settings";
-import { isMpesaConfigured, MpesaError, mpesaStatus, queryStkStatus } from "../lib/mpesa";
+import {
+  checkMpesaKeys, isMpesaConfigured, loadMpesaSettings, MpesaError, mpesaSettingsView, mpesaStatus, normalizeKenyanPhone,
+  queryStkStatus, saveMpesaSettings, sendStkPush,
+} from "../lib/mpesa";
 import { isMailConfigured, lastMailError, publicOrigin } from "../lib/mailer";
 import { createResetToken, resetUrl, sendResetEmail } from "../lib/password-reset";
 import { applyMpesaResult } from "./payments";
@@ -576,15 +579,63 @@ const UpdatePaymentBody = z.object({
   receipt: z.string().trim().max(60).optional(),
 });
 
-router.get("/admin/mpesa", (_req, res) => {
-  res.json(mpesaStatus());
+router.get("/admin/mpesa", async (_req, res) => {
+  await loadMpesaSettings(true);
+  res.json({ ...mpesaStatus(), settings: mpesaSettingsView() });
+});
+
+const digits = (max: number) => z.string().trim().regex(/^\d*$/, "Use digits only.").max(max);
+// Omitted fields stay as they are; an empty string clears the saved value.
+const MpesaSettingsBody = z.object({
+  MPESA_ENV: z.enum(["sandbox", "production"]),
+  MPESA_TRANSACTION_TYPE: z.enum(["CustomerBuyGoodsOnline", "CustomerPayBillOnline"]),
+  MPESA_SHORTCODE: digits(10),
+  MPESA_TILL_NUMBER: digits(10),
+  MPESA_CONSUMER_KEY: z.string().trim().max(200),
+  MPESA_CONSUMER_SECRET: z.string().trim().max(200),
+  MPESA_PASSKEY: z.string().trim().max(200),
+  MPESA_CALLBACK_URL: z.string().trim().max(300).refine((u) => u === "" || /^https:\/\/\S+$/.test(u), "The callback address must start with https://"),
+}).partial().strict();
+
+router.put("/admin/mpesa", async (req, res) => {
+  const body = MpesaSettingsBody.safeParse(req.body);
+  if (!body.success) return badRequest(res, body.error);
+  const patch = { ...body.data };
+  // With no callback address anywhere yet, use this site's own (as long as it's a public https address).
+  await loadMpesaSettings(true);
+  const host = req.get("host") ?? "";
+  if (!patch.MPESA_CALLBACK_URL && !mpesaStatus().callbackUrl && req.protocol === "https" && !/^(localhost|127\.|\[::1\])/.test(host)) {
+    patch.MPESA_CALLBACK_URL = `https://${host}/api/mpesa/callback`;
+  }
+  await saveMpesaSettings(patch);
+  res.json({ ...mpesaStatus(), settings: mpesaSettingsView() });
+});
+
+// Checks the keys with Safaricom; with a phone number, also sends a KES 1 prompt to it (not recorded as a payment).
+router.post("/admin/mpesa/test", async (req, res) => {
+  const body = z.object({ phone: z.string().trim().max(20).optional() }).safeParse(req.body ?? {});
+  if (!body.success) return badRequest(res, body.error);
+  await loadMpesaSettings(true);
+  const status = mpesaStatus();
+  if (!status.configured) return void res.status(400).json({ error: `Fill in ${status.missing.join(", ")} first.` });
+  const phone = body.data.phone ? normalizeKenyanPhone(body.data.phone) : null;
+  if (body.data.phone && !phone) return void res.status(400).json({ error: "Enter a Safaricom number like 0712 345 678." });
+  try {
+    await checkMpesaKeys();
+    if (!phone) return void res.json({ ok: true, message: "Safaricom accepted the keys. Add your phone number to test a real prompt." });
+    const sent = await sendStkPush({ phone, amount: 1, accountReference: "TEST", description: "Uhandisi test" });
+    res.json({ ok: true, message: `Prompt sent to ${phone}. ${sent.customerMessage || ""}`.trim() });
+  } catch (e) {
+    res.status(502).json({ error: e instanceof MpesaError ? `M-Pesa: ${e.message}` : "Could not reach Safaricom." });
+  }
 });
 
 // Asks Safaricom directly, for when a callback never arrived (e.g. a local machine Safaricom can't reach).
 router.post("/admin/payments/:id/check", async (req, res) => {
   const id = Id.safeParse(req.params.id);
   if (!id.success) return void res.status(400).json({ error: "Invalid payment id" });
-  if (!isMpesaConfigured()) return void res.status(400).json({ error: "M-Pesa isn't connected yet. Add the Daraja keys to the server's .env file." });
+  await loadMpesaSettings();
+  if (!isMpesaConfigured()) return void res.status(400).json({ error: "M-Pesa isn't connected yet. Fill in the M-Pesa settings on the Payments page." });
   const [payment] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, id.data)).limit(1);
   if (!payment) return void res.status(404).json({ error: "Payment not found" });
   if (!payment.checkoutRequestId || payment.checkoutRequestId.startsWith("manual_")) {

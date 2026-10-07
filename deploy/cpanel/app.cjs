@@ -6,7 +6,8 @@ const path = require("node:path");
 // Settings from .env, unless the same name is already set in cPanel's Environment variables.
 const envFile = path.join(__dirname, ".env");
 if (fs.existsSync(envFile)) {
-  for (const line of fs.readFileSync(envFile, "utf8").split(/\r?\n/)) {
+  // Windows editors may start the file with an invisible BOM, which would hide the first setting.
+  for (const line of fs.readFileSync(envFile, "utf8").replace(/^﻿/, "").split(/\r?\n/)) {
     const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
     if (!m || process.env[m[1]] !== undefined) continue;
     let value = m[2];
