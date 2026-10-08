@@ -15,7 +15,7 @@ import {
   queryStkStatus, saveMpesaSettings, sendStkPush,
 } from "../lib/mpesa";
 import { isMailConfigured, lastMailError, publicOrigin } from "../lib/mailer";
-import { createResetToken, resetUrl, sendResetEmail } from "../lib/password-reset";
+import { CODE_TTL_MINUTES, createResetCode, sendResetCodeEmail } from "../lib/password-reset";
 import { applyMpesaResult } from "./payments";
 
 const router: IRouter = Router();
@@ -122,17 +122,20 @@ router.post("/admin/users/:id/password", async (req, res) => {
   res.status(204).end();
 });
 
-// A reset link for someone who forgot their password. It's emailed when email is set up, and
+// A reset code for someone who forgot their password. It's emailed when email is set up, and
 // always returned so the admin can pass it on (WhatsApp, SMS) until then.
-router.post("/admin/users/:id/reset-link", async (req, res) => {
+router.post("/admin/users/:id/reset-code", async (req, res) => {
   const id = Id.safeParse(req.params.id);
   if (!id.success) return void res.status(400).json({ error: "Invalid user id" });
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, id.data)).limit(1);
   if (!user) return void res.status(404).json({ error: "User not found" });
   if (!user.active) return void res.status(400).json({ error: "This account is suspended. Reactivate it first." });
-  const url = resetUrl(publicOrigin(req), (await createResetToken(user.id, { force: true }))!);
-  const emailed = await sendResetEmail(user, url);
-  res.json({ url, emailed, emailConfigured: isMailConfigured(), emailError: emailed ? undefined : lastMailError() || undefined });
+  const code = (await createResetCode(user.id, { force: true }))!;
+  const emailed = await sendResetCodeEmail(user, code);
+  res.json({
+    code, minutes: CODE_TTL_MINUTES, resetPage: `${publicOrigin(req)}/forgot-password`,
+    emailed, emailConfigured: isMailConfigured(), emailError: emailed ? undefined : lastMailError() || undefined,
+  });
 });
 
 router.delete("/admin/users/:id", async (req, res) => {

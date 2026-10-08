@@ -4,6 +4,7 @@ import { z } from "zod";
 import { certificatesTable, db, enrollmentsTable, lessonsTable, modulesTable, quizAttemptsTable, usersTable } from "@workspace/db";
 import { requireAdmin, requireAuth } from "../lib/auth";
 import { lessonForViewer } from "../lib/access";
+import { publicOrigin } from "../lib/mailer";
 import { userProgress } from "../lib/progress";
 import { renderCertificate } from "./admin-certificates";
 import {
@@ -63,9 +64,6 @@ router.get("/certificates/mine", requireAuth, handle(async (req) => {
     .where(and(eq(certificatesTable.userId, req.user!.id), isNull(certificatesTable.revokedAt))).orderBy(desc(certificatesTable.issuedAt));
   return rows.map((c) => ({ code: c.code, courseId: c.courseId, courseTitle: c.courseTitle, percent: c.percent, issuedAt: c.issuedAt.toISOString() }));
 }));
-
-// The site address for links in certificates. Set PUBLIC_URL in .env once the site is online.
-const publicOrigin = (req: Request) => (process.env.PUBLIC_URL || `${req.protocol}://${req.host}`).replace(/\/+$/, "");
 
 // The certificate's owner and admins can download it.
 router.get("/certificates/:code/pdf", requireAuth, handle(async (req, res) => {

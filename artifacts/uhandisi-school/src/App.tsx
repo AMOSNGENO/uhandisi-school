@@ -27,7 +27,7 @@ import { useSiteSettings } from '@/lib/site';
 import NotFound from '@/pages/not-found';
 import ModulePage from '@/pages/module';
 import { CertificatesPage, VerifyPage } from '@/pages/certificates';
-import { AccountDetails, ChangePassword, ForgotPasswordPage, ResetPasswordPage } from '@/pages/password';
+import { AccountDetails, ChangePassword, ForgotPasswordPage } from '@/pages/password';
 import RichContent from '@/components/rich-content';
 import '@/index.css';
 
@@ -567,7 +567,8 @@ function AppRouter() {
       <Route path="/login">{() => <AuthPage mode="login" />}</Route>
       <Route path="/register">{() => <AuthPage mode="register" />}</Route>
       <Route path="/forgot-password" component={ForgotPasswordPage} />
-      <Route path="/reset-password" component={ResetPasswordPage} />
+      {/* Reset links in older emails: resets now use an emailed code. */}
+      <Route path="/reset-password"><Redirect to="/forgot-password" /></Route>
       <Route path="/"><Shell><ErrorBoundary><GuestHomePage /></ErrorBoundary></Shell></Route>
       <Route path="/courses"><Shell><ErrorBoundary><CoursesPage /></ErrorBoundary></Shell></Route>
       <Route path="/courses/:id"><Shell><ErrorBoundary><DetailPage /></ErrorBoundary></Shell></Route>
@@ -576,8 +577,7 @@ function AppRouter() {
     </Switch>;
   }
   if (location === '/login' || location === '/register') return <Redirect to={user.role === 'admin' ? '/admin' : '/'} />;
-  if (location === '/forgot-password') return <Redirect to="/profile" />;
-  if (location === '/reset-password') return <ResetPasswordPage />;
+  if (location === '/forgot-password' || location === '/reset-password') return <Redirect to="/profile" />;
 
   return <Shell><ErrorBoundary><Switch>
     <Route path="/" component={HomePage} /><Route path="/courses" component={CoursesPage} /><Route path="/courses/:id/modules/:moduleId" component={ModulePage} /><Route path="/courses/:id" component={DetailPage} />

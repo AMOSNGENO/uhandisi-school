@@ -227,4 +227,5 @@ export const passwordResetsTable = mysqlTable("password_resets", {
   createdAt: datetime("created_at").notNull(),
   expiresAt: datetime("expires_at").notNull(),
   usedAt: datetime("used_at"),
+  attempts: int("attempts").notNull().default(0),
 });

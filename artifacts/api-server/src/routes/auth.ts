@@ -3,8 +3,7 @@ import { and, eq, ne } from "drizzle-orm";
 import { z } from "zod";
 import { db, hashPassword, sessionsTable, usersTable, verifyPassword } from "@workspace/db";
 import { endSession, requireAuth, SESSION_COOKIE, startSession, toPublicUser } from "../lib/auth";
-import { publicOrigin } from "../lib/mailer";
-import { completeReset, createResetToken, maskEmail, resetUrl, sendResetEmail, userForToken } from "../lib/password-reset";
+import { CODE_TTL_MINUTES, createResetCode, resetWithCode, sendResetCodeEmail } from "../lib/password-reset";
 
 const router: IRouter = Router();
 
@@ -102,7 +101,7 @@ router.post("/auth/password", requireAuth, async (req, res) => {
   res.status(204).end();
 });
 
-// Forgot password: emails a one-time link. The reply is the same whether or not the email has an
+// Forgot password: emails a 6-digit code. The reply is the same whether or not the email has an
 // account, so this can't be used to find out who studies here.
 const forgotHits = new Map<string, number[]>();
 router.post("/auth/forgot-password", async (req, res) => {
@@ -117,26 +116,32 @@ router.post("/auth/forgot-password", async (req, res) => {
   if (!email.success) return void res.status(400).json({ error: "Enter the email address you signed up with." });
   const [user] = await db.select().from(usersTable).where(eq(usersTable.email, email.data)).limit(1);
   if (user?.active) {
-    const token = await createResetToken(user.id);
-    if (token) await sendResetEmail(user, resetUrl(publicOrigin(req), token));
+    const code = await createResetCode(user.id);
+    if (code) await sendResetCodeEmail(user, code);
   }
-  res.json({ ok: true });
+  res.json({ ok: true, minutes: CODE_TTL_MINUTES });
 });
 
-// The reset page checks its link first, so an old one says so before the student types anything.
-router.get("/auth/reset-password/:token", async (req, res) => {
-  const user = await userForToken(req.params.token);
-  if (!user) return void res.status(404).json({ error: "This reset link has expired or was already used. Ask for a new one." });
-  res.json({ email: maskEmail(user.email) });
-});
-
+// The code from the email plus a new password; a right code signs the person straight in.
+const resetHits = new Map<string, number[]>();
 router.post("/auth/reset-password", async (req, res) => {
-  const body = z.object({ token: z.string(), password: NewPassword }).safeParse(req.body);
+  const ip = req.ip ?? "?";
+  const now = Date.now();
+  const hits = (resetHits.get(ip) ?? []).filter((t) => now - t < 15 * 60 * 1000);
+  if (hits.length >= 20) return void res.status(429).json({ error: "Too many tries. Wait a few minutes and try again." });
+  if (resetHits.size > 5000) resetHits.clear();
+  resetHits.set(ip, [...hits, now]);
+
+  const body = z.object({
+    email: z.string().trim().toLowerCase().email("Enter the email address you signed up with.").max(190),
+    code: z.string().transform((c) => c.replace(/\s/g, "")),
+    password: NewPassword,
+  }).safeParse(req.body);
   if (!body.success) return void res.status(400).json({ error: body.error.issues[0]!.message });
-  const user = await completeReset(body.data.token, body.data.password);
-  if (!user) return void res.status(404).json({ error: "This reset link has expired or was already used. Ask for a new one." });
-  await startSession(res, user.id);
-  res.json(toPublicUser(user));
+  const result = await resetWithCode(body.data.email, body.data.code, body.data.password);
+  if ("error" in result) return void res.status(400).json({ error: result.error });
+  await startSession(res, result.user.id);
+  res.json(toPublicUser(result.user));
 });
 
 export default router;

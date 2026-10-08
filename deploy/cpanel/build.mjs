@@ -61,15 +61,15 @@ NODE_ENV=production
 # (@ → %40, # → %23, : → %3A, / → %2F, ? → %3F).
 DATABASE_URL=mysql://CPANELUSER_uhandisi:PASSWORD@localhost:3306/CPANELUSER_uhandisi
 
-# Your site's address, used in certificate QR codes and password reset links.
-PUBLIC_URL=https://uhandisi.com
+# Your site's address. Links use the address people actually visit; this is the fallback.
+PUBLIC_URL=${envValue("PUBLIC_URL", "https://uhandisischool.com")}
 
-# Email for password reset links: the cPanel mailbox. Put its password in SMTP_PASS.
-SMTP_HOST=mail.uhandisi.com
+# Email for password reset codes: the cPanel mailbox. Put its password in SMTP_PASS.
+SMTP_HOST=${envValue("SMTP_HOST", "mail.uhandisischool.com")}
 SMTP_PORT=465
-SMTP_USER=noreply@uhandisi.com
+SMTP_USER=${envValue("SMTP_USER", "noreply@uhandisischool.com")}
 SMTP_PASS=
-MAIL_FROM=Uhandisi School <noreply@uhandisi.com>
+MAIL_FROM=${envValue("MAIL_FROM", "Uhandisi School <noreply@uhandisischool.com>")}
 
 # M-Pesa (Daraja). Values are copied from the private local API .env when present.
 # Production STK Push also requires the production shortcode and Lipa Na M-Pesa passkey.
@@ -80,7 +80,7 @@ MPESA_SHORTCODE=${envValue("MPESA_SHORTCODE")}
 MPESA_PASSKEY=${envValue("MPESA_PASSKEY")}
 MPESA_TRANSACTION_TYPE=${envValue("MPESA_TRANSACTION_TYPE", "CustomerPayBillOnline")}
 MPESA_TILL_NUMBER=${envValue("MPESA_TILL_NUMBER")}
-MPESA_CALLBACK_URL=${envValue("MPESA_CALLBACK_URL", "https://uhandisi.com/api/mpesa/callback")}
+MPESA_CALLBACK_URL=${envValue("MPESA_CALLBACK_URL", "https://uhandisischool.com/api/mpesa/callback")}
 MPESA_CALLBACK_SECRET=${envValue("MPESA_CALLBACK_SECRET", randomBytes(24).toString("hex"))}
 `);
 

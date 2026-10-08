@@ -1,5 +1,5 @@
 import { type FormEvent, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { Link, useLocation } from 'wouter';
 import { ArrowRight, Check, KeyRound, MailCheck, UserRound } from 'lucide-react';
 import { api, type CurrentUser, ME_KEY, useAuthActions, useCurrentUser } from '@/lib/auth';
@@ -7,77 +7,70 @@ import { AuthError, AuthFrame, authButton, authInput } from '@/pages/auth';
 
 const message = (e: unknown) => e instanceof Error ? e.message : 'Something went wrong. Try again.';
 
+/** Forgot password: email → 6-digit code by email → code + new password, then straight in. */
 export function ForgotPasswordPage() {
-  const [email, setEmail] = useState('');
-  const [sent, setSent] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    setBusy(true);
-    setError('');
-    try {
-      await api('/auth/forgot-password', { method: 'POST', body: { email } });
-      setSent(true);
-    } catch (err) { setError(message(err)); } finally { setBusy(false); }
-  };
-
-  if (sent) return <AuthFrame eyebrow="Check your email" title="Reset link on its way">
-    <div className="mt-8 space-y-4 text-sm leading-6" data-testid="status-reset-sent">
-      <p className="flex gap-3 rounded-md bg-[hsl(var(--secondary)/.6)] p-4"><MailCheck size={18} className="mt-0.5 shrink-0 text-[hsl(var(--primary))]" />
-        <span>If <b>{email}</b> has an Uhandisi account, we’ve emailed it a link to choose a new password. It works for one hour.</span></p>
-      <p className="text-xs text-[hsl(var(--muted-foreground))]">Nothing after a few minutes? Check your spam folder, or ask the school to send you a reset link.</p>
-      <Link href="/login" className={authButton} data-testid="link-back-login">Back to log in</Link>
-    </div>
-  </AuthFrame>;
-
-  return <AuthFrame eyebrow="Forgot password" title="Reset your password">
-    <p className="mt-3 text-sm text-[hsl(var(--muted-foreground))]">Enter the email you signed up with and we’ll send you a link to choose a new password.</p>
-    <form onSubmit={submit} className="mt-8 space-y-4">
-      <label className="block text-xs font-bold">Email<input required type="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} className={authInput} data-testid="input-email" /></label>
-      {error && <AuthError>{error}</AuthError>}
-      <button disabled={busy} className={authButton} data-testid="button-send-reset">{busy ? 'Sending…' : <>Send reset link <ArrowRight size={16} /></>}</button>
-    </form>
-    <p className="mt-6 text-center text-xs text-[hsl(var(--muted-foreground))]">Remembered it? <Link href="/login" className="font-bold text-[hsl(var(--primary))] hover:underline">Log in</Link></p>
-  </AuthFrame>;
-}
-
-export function ResetPasswordPage() {
-  const token = new URLSearchParams(window.location.search).get('token') ?? '';
   const [, navigate] = useLocation();
   const { resetPassword } = useAuthActions();
-  const link = useQuery({ queryKey: ['reset-link', token], queryFn: () => api<{ email: string }>(`/auth/reset-password/${encodeURIComponent(token)}`), retry: false, enabled: !!token });
+  // Admins can pass on a code by WhatsApp; ?email= fills in the address for the student.
+  const [email, setEmail] = useState(() => new URLSearchParams(window.location.search).get('email') ?? '');
+  const [step, setStep] = useState<'email' | 'code'>('email');
+  const [minutes, setMinutes] = useState(15);
+  const [code, setCode] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (password !== confirm) return setError('The two passwords don’t match.');
+  const [resent, setResent] = useState(false);
+
+  const sendCode = async () => {
+    const r = await api<{ minutes?: number }>('/auth/forgot-password', { method: 'POST', body: { email } });
+    if (r?.minutes) setMinutes(r.minutes);
+  };
+  const run = (fn: () => Promise<void>) => async (e?: FormEvent) => {
+    e?.preventDefault();
     setBusy(true);
     setError('');
-    try {
-      const user = await resetPassword(token, password);
-      navigate(user.role === 'admin' ? '/admin' : '/');
-    } catch (err) { setError(message(err)); } finally { setBusy(false); }
+    try { await fn(); } catch (err) { setError(message(err)); } finally { setBusy(false); }
   };
+  const requestCode = run(async () => { await sendCode(); setStep('code'); setResent(false); });
+  const resend = run(async () => { await sendCode(); setCode(''); setResent(true); });
+  const save = run(async () => {
+    if (password !== confirm) throw new Error('The two passwords don’t match.');
+    const user = await resetPassword(email, code, password);
+    navigate(user.role === 'admin' ? '/admin' : '/');
+  });
 
-  if (!token || link.isError) return <AuthFrame eyebrow="Reset password" title="This link doesn’t work">
-    <div className="mt-8 space-y-4" data-testid="status-reset-invalid">
-      <AuthError>{link.error ? message(link.error) : 'The reset link is incomplete. Open it straight from the email.'}</AuthError>
-      <Link href="/forgot-password" className={authButton}>Get a new link</Link>
-    </div>
-  </AuthFrame>;
-
-  return <AuthFrame eyebrow="Reset password" title="Choose a new password">
-    <p className="mt-3 text-sm text-[hsl(var(--muted-foreground))]">{link.data ? <>For the account <b>{link.data.email}</b>.</> : 'Checking your link…'}</p>
-    <form onSubmit={submit} className="mt-8 space-y-4">
+  if (step === 'code') return <AuthFrame eyebrow="Check your email" title="Enter your reset code">
+    <p className="mt-3 flex gap-3 rounded-md bg-[hsl(var(--secondary)/.6)] p-4 text-sm leading-6" data-testid="status-reset-sent"><MailCheck size={18} className="mt-1 shrink-0 text-[hsl(var(--primary))]" />
+      <span>If <b>{email}</b> has an Uhandisi account, we’ve emailed it a 6-digit code. It works for {minutes} minutes.</span></p>
+    <form onSubmit={save} className="mt-6 space-y-4">
+      <label className="block text-xs font-bold">6-digit code
+        <input required autoFocus inputMode="numeric" autoComplete="one-time-code" pattern="\d{6}" maxLength={6} value={code}
+          onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+          className={`${authInput} text-center font-mono-ui text-2xl tracking-[.5em]`} placeholder="••••••" data-testid="input-reset-code" /></label>
       <label className="block text-xs font-bold">New password<input required type="password" minLength={8} autoComplete="new-password" value={password} onChange={e => setPassword(e.target.value)} className={authInput} data-testid="input-new-password" />
         <span className="mt-1.5 block font-normal text-[hsl(var(--muted-foreground))]">At least 8 characters.</span></label>
       <label className="block text-xs font-bold">Type it again<input required type="password" minLength={8} autoComplete="new-password" value={confirm} onChange={e => setConfirm(e.target.value)} className={authInput} data-testid="input-confirm-password" /></label>
       {error && <AuthError>{error}</AuthError>}
-      <button disabled={busy || !link.data} className={authButton} data-testid="button-reset-password">{busy ? 'Saving…' : <>Save and log in <ArrowRight size={16} /></>}</button>
+      <button disabled={busy || code.length !== 6} className={authButton} data-testid="button-reset-password">{busy ? 'Saving…' : <>Save and log in <ArrowRight size={16} /></>}</button>
     </form>
+    <div className="mt-6 space-y-2 text-center text-xs text-[hsl(var(--muted-foreground))]">
+      <p>No email after a few minutes? Check your spam folder, or ask the school for a code.</p>
+      <p>{resent ? <span className="font-bold text-[hsl(145_55%_25%)]">A new code is on its way; only the newest one works.</span>
+        : <button type="button" disabled={busy} onClick={() => resend()} className="font-bold text-[hsl(var(--primary))] hover:underline" data-testid="button-resend-code">Send a new code</button>}
+        {' · '}<button type="button" onClick={() => { setStep('email'); setError(''); }} className="font-bold text-[hsl(var(--primary))] hover:underline">Use another email</button></p>
+    </div>
+  </AuthFrame>;
+
+  return <AuthFrame eyebrow="Forgot password" title="Reset your password">
+    <p className="mt-3 text-sm text-[hsl(var(--muted-foreground))]">Enter the email you signed up with and we’ll email you a 6-digit code to choose a new password.</p>
+    <form onSubmit={requestCode} className="mt-8 space-y-4">
+      <label className="block text-xs font-bold">Email<input required type="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} className={authInput} data-testid="input-email" /></label>
+      {error && <AuthError>{error}</AuthError>}
+      <button disabled={busy} className={authButton} data-testid="button-send-reset">{busy ? 'Sending…' : <>Send code <ArrowRight size={16} /></>}</button>
+    </form>
+    <p className="mt-4 text-center text-xs text-[hsl(var(--muted-foreground))]">Already have a code? <button type="button" onClick={() => email ? setStep('code') : setError('Enter your email first.')} className="font-bold text-[hsl(var(--primary))] hover:underline" data-testid="button-have-code">Enter it</button></p>
+    <p className="mt-2 text-center text-xs text-[hsl(var(--muted-foreground))]">Remembered it? <Link href="/login" className="font-bold text-[hsl(var(--primary))] hover:underline">Log in</Link></p>
   </AuthFrame>;
 }
 

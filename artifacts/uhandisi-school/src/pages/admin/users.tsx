@@ -1,6 +1,6 @@
 import { type FormEvent, useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { KeyRound, Link2, Search, Trash2, UserPlus } from 'lucide-react';
+import { KeyRound, Search, Trash2, UserPlus } from 'lucide-react';
 import { api, useCurrentUser, type Role } from '@/lib/auth';
 import type { AdminUser } from './types';
 import { AdminLayout, Badge, card, dangerBtn, ErrorNote, field, ghostBtn, hint, label, Loading, Modal, primaryBtn, shortDate, td, th } from './ui';
@@ -103,7 +103,7 @@ function EditUser({ user, self, onClose }: { user: AdminUser; self: boolean; onC
     mutationFn: () => api(`/admin/users/${user.id}/password`, { method: 'POST', body: { password } }),
     onSuccess: () => { setNotice(`Password changed. ${self ? '' : 'They have been signed out everywhere; '}share the new one with them: ${password}`); setPassword(''); },
   });
-  const resetLink = useMutation({ mutationFn: () => api<{ url: string; emailed: boolean; emailConfigured: boolean; emailError?: string }>(`/admin/users/${user.id}/reset-link`, { method: 'POST' }) });
+  const resetCode = useMutation({ mutationFn: () => api<{ code: string; minutes: number; resetPage: string; emailed: boolean; emailConfigured: boolean; emailError?: string }>(`/admin/users/${user.id}/reset-code`, { method: 'POST' }) });
   const remove = useMutation({ mutationFn: () => api(`/admin/users/${user.id}`, { method: 'DELETE' }), onSuccess: () => { refresh(); onClose(); } });
   const set = (k: 'name' | 'email' | 'phone' | 'role') => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm(f => ({ ...f, [k]: e.target.value }));
 
@@ -125,14 +125,20 @@ function EditUser({ user, self, onClose }: { user: AdminUser; self: boolean; onC
       </form>
       {!self && user.active && <div className="space-y-3 border-t border-[hsl(var(--border))] pt-5">
         <div className="flex items-center justify-between gap-3">
-          <div><h3 className="flex items-center gap-2 text-sm font-bold"><Link2 size={15} /> Password reset link</h3><p className={`${hint} mt-1 text-xs`}>Lets them choose their own password. Works once, for one hour.</p></div>
-          <button type="button" disabled={resetLink.isPending} onClick={() => resetLink.mutate()} className={ghostBtn} data-testid="button-reset-link">{resetLink.isPending ? 'Creating…' : 'Create link'}</button>
+          <div><h3 className="flex items-center gap-2 text-sm font-bold"><KeyRound size={15} /> Password reset code</h3><p className={`${hint} mt-1 text-xs`}>Emails them a 6-digit code to choose their own password. Works once, for 15 minutes.</p></div>
+          <button type="button" disabled={resetCode.isPending} onClick={() => resetCode.mutate()} className={ghostBtn} data-testid="button-reset-code">{resetCode.isPending ? 'Sending…' : 'Send code'}</button>
         </div>
-        {resetLink.data && <div className="space-y-2 rounded-md bg-[hsl(var(--secondary))] p-3 text-xs" role="status" data-testid="reset-link">
-          <p>{resetLink.data.emailed ? <>Emailed to <b>{user.email}</b>. You can also send them this link:</> : resetLink.data.emailConfigured ? <>The email couldn’t be sent{resetLink.data.emailError ? <>. The mail server said: <b className="break-all" data-testid="reset-email-error">{resetLink.data.emailError}</b></> : ''}. Send them this link on WhatsApp or SMS meanwhile:</> : <>Email isn’t set up yet, so send them this link on WhatsApp or SMS:</>}</p>
-          <div className="flex gap-2"><input readOnly value={resetLink.data.url} onFocus={e => e.target.select()} className={`${field} mt-0 font-mono-ui text-xs`} aria-label="Reset link" /><button type="button" onClick={() => navigator.clipboard?.writeText(resetLink.data!.url)} className={ghostBtn}>Copy</button></div>
-        </div>}
-        <ErrorNote error={resetLink.error} />
+        {resetCode.data && (() => {
+          const d = resetCode.data;
+          const page = `${d.resetPage}?email=${encodeURIComponent(user.email)}`;
+          const note = `Your Uhandisi School reset code is ${d.code}. Enter it at ${page} within ${d.minutes} minutes.`;
+          return <div className="space-y-2 rounded-md bg-[hsl(var(--secondary))] p-3 text-xs" role="status" data-testid="reset-code">
+            <p>{d.emailed ? <>Emailed to <b>{user.email}</b>. You can also give them the code yourself:</> : d.emailConfigured ? <>The email couldn’t be sent{d.emailError ? <>. The mail server said: <b className="break-all" data-testid="reset-email-error">{d.emailError}</b></> : ''}. Send them this on WhatsApp or SMS meanwhile:</> : <>Email isn’t set up yet, so send them this on WhatsApp or SMS:</>}</p>
+            <p className="font-mono-ui text-2xl font-bold tracking-[.3em]" data-testid="text-reset-code">{d.code}</p>
+            <div className="flex gap-2"><input readOnly value={note} onFocus={e => e.target.select()} className={`${field} mt-0 text-xs`} aria-label="Message with the reset code" /><button type="button" onClick={() => navigator.clipboard?.writeText(note)} className={ghostBtn}>Copy</button></div>
+          </div>;
+        })()}
+        <ErrorNote error={resetCode.error} />
       </div>}
       <form onSubmit={e => { e.preventDefault(); reset.mutate(); }} className="space-y-3 border-t border-[hsl(var(--border))] pt-5">
         <h3 className="flex items-center gap-2 text-sm font-bold"><KeyRound size={15} /> Set a new password</h3>

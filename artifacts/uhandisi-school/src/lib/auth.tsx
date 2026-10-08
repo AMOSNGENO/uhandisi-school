@@ -54,8 +54,8 @@ export function useAuthActions() {
     register: async (body: { name: string; email: string; phone?: string; password: string }) =>
       signedIn(await api<CurrentUser>('/auth/register', { method: 'POST', body })),
     // A successful reset signs the person straight in.
-    resetPassword: async (token: string, password: string) =>
-      signedIn(await api<CurrentUser>('/auth/reset-password', { method: 'POST', body: { token, password } })),
+    resetPassword: async (email: string, code: string, password: string) =>
+      signedIn(await api<CurrentUser>('/auth/reset-password', { method: 'POST', body: { email, code, password } })),
     logout: async () => {
       await api('/auth/logout', { method: 'POST' });
       client.clear();

@@ -6,6 +6,7 @@ import { z } from "zod";
 import { PDFDocument } from "pdf-lib";
 import { certificatesTable, certificateTemplatesTable, coursesTable, db, type Certificate, type CertificateTemplate } from "@workspace/db";
 import { requireAdmin } from "../lib/auth";
+import { publicOrigin } from "../lib/mailer";
 import { certificatePdf, certificateValues, defaultFields, FONTS, templatePdf, type TemplateField } from "../lib/certificate-pdf";
 import { newKey, privateDir, saveRequestBody, UploadError } from "../lib/storage";
 
@@ -170,7 +171,7 @@ router.get("/admin/certificate-templates/:id/preview", async (req, res) => {
   const t = await templateOr404(req, res);
   if (!t) return;
   const sample = { studentName: "Wanjiru Kamau", courseTitle: "Data Analytics", issuedAt: new Date(), percent: 86, code: "UHS-SAMPLE01" };
-  const origin = (process.env.PUBLIC_URL || `${req.protocol}://${req.host}`).replace(/\/+$/, "");
+  const origin = publicOrigin(req);
   const pdf = await templatePdf(
     { kind: t.kind, bytes: await readFile(templateFile(t)), pageWidth: t.pageWidth, pageHeight: t.pageHeight, fields: parseFields(t) },
     certificateValues(sample, `${origin}/verify/${sample.code}`),

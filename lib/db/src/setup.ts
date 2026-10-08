@@ -155,7 +155,7 @@ const tables = [
     name VARCHAR(64) PRIMARY KEY,
     value TEXT NOT NULL
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
-  // One-time password reset links. Only a SHA-256 of the token is stored.
+  // One-time password reset codes. Only a SHA-256 of the code is stored.
   `CREATE TABLE IF NOT EXISTS password_resets (
     token_hash CHAR(64) PRIMARY KEY,
     user_id INT NOT NULL,
@@ -266,6 +266,8 @@ const addedColumns: Array<[table: string, column: string, definition: string]> =
   ["enrollments", "plan_id", "VARCHAR(20) NULL"],
   // Where an item came from when imported from Moodle, so a re-import updates instead of duplicating.
   ["courses", "moodle_id", "INT NULL"],
+  // Password reset became a 6-digit emailed code; wrong guesses are counted so it can't be guessed.
+  ["password_resets", "attempts", "INT NOT NULL DEFAULT 0"],
   ["modules", "moodle_ref", "VARCHAR(40) NULL"],
   ["lessons", "moodle_ref", "VARCHAR(40) NULL"],
   // Moodle's content hash of the imported file: unchanged files aren't downloaded again.
